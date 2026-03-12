@@ -1,0 +1,45 @@
+services:
+  db:
+    image: postgres:16
+    container_name: frap_db
+    environment:
+      POSTGRES_DB: frap
+      POSTGRES_USER: frap
+      POSTGRES_PASSWORD: frap
+    ports:
+      - "5432:5432"
+    volumes:
+      - frap_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U frap -d frap"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: ../backend_kernel
+      dockerfile: Dockerfile
+    container_name: frap_api
+    env_file:
+      - ../backend_kernel/.env
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../backend_kernel:/app
+
+  web:
+    build:
+      context: ../frontdesk3
+      dockerfile: Dockerfile
+    container_name: frap_web
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
+
+volumes:
+  frap_pgdata:
