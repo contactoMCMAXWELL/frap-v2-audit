@@ -1,0 +1,54 @@
+# Secretos / entorno
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# Node / frontend
+node_modules/
+dist/
+.vite/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs y temporales
+*.log
+*.tmp
+*.swp
+
+# Respaldos manuales
+*.bak
+*.bak_*
+*.bak-*
+*.backup
+*.dump
+*.sql
+
+# Archivos comprimidos
+*.tar
+*.tar.gz
+*.zip
+
+# Copias históricas / carpetas de trabajo fuera del código activo
+backend_kernel_bak_*/
+frontdesk3_bak_*/
+frap-v2-fix/
+
+# Evidencias y archivos de pruebas locales
+infra/*_test.json
+infra/openapi.json
+
+# Backups adicionales
+*_bak_*/
+*_backup_*/

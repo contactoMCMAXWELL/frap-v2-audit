@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>FRAP Médico Legal</title>
+  <style>
+    :root {
+      --primary: {{ payload.branding.primary_color or '#0f4c81' }};
+      --accent: {{ payload.branding.accent_color or '#0f766e' }};
+      --section-bg: {{ payload.branding.section_bg_color or '#eff6ff' }};
+      --section-border: {{ payload.branding.section_border_color or '#dbeafe' }};
+      --text-main: {{ payload.branding.text_color or '#1f2937' }};
+    }
+
+    @page {
+      size: A4;
+      margin: 18mm 14mm 18mm 14mm;
+
+      @bottom-left {
+        content: "FRAP V2 - Documento Médico Legal";
+        font-size: 9px;
+        color: #6b7280;
+      }
+
+      @bottom-right {
+        content: "Página " counter(page) " de " counter(pages);
+        font-size: 9px;
+        color: #6b7280;
+      }
+    }
+
+    body {
+      font-family: DejaVu Sans, Arial, sans-serif;
+      font-size: 10.5px;
+      color: var(--text-main);
+      line-height: 1.35;
+    }
+
+    .doc { width: 100%; }
+
+    .header {
+      border: 1px solid #d1d5db;
+      border-radius: 14px;
+      padding: 16px 18px;
+      margin-bottom: 14px;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fbff 45%, #eef5ff 100%);
+      box-shadow: 0 2px 10px rgba(15, 76, 129, 0.06);
+    }
+
+    .header-table, .meta-table, .table { width: 100%; border-collapse: collapse; }
+    .header-left, .header-right { vertical-align: top; }
+    .header-right { width: 34%; }
+
+    .brand-name {
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--primary);
+      margin-bottom: 4px;
+      letter-spacing: 0.01em;
+    }
+
+    .brand-meta { font-size: 9.5px; color: #475569; }
+    .logo { max-height: 56px; max-width: 180px; margin-bottom: 8px; }
+
+    .folio-box {
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      background: #ffffff;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+    }
+
+    .folio-title {
+      font-size: 9px;
+      text-transform: uppercase;
+      color: #64748b;
+      margin-bottom: 2px;
+      font-weight: 700;
+    }
+
+    .folio-value {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--primary);
+    }
+
+    .status-chip {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: #ffffff;
+      background: var(--accent);
+    }
+
+    .status-chip.warning { background: #b45309; }
+    .section { margin-bottom: 14px; }
+
+    .section-title {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--primary);
+      background: var(--section-bg);
+      border: 1px solid var(--section-border);
+      border-left: 4px solid var(--primary);
+      border-radius: 8px;
+      padding: 7px 10px;
+      margin-bottom: 8px;
+      letter-spacing: 0.01em;
+    }
+
+    .grid-2 {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 8px;
+      margin: -8px;
+    }
+
+    .card {
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      background: #ffffff;
+      padding: 10px 12px;
+      vertical-align: top;
+      box-shadow: 0 1px 4px rgba(15, 23, 42, 0.03);
+    }
+
+    .mini-card {
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      background: #fbfdff;
+      padding: 8px 10px;
+    }
+
+    .mini-card-title {
+      font-size: 8.5px;
+      text-transform: uppercase;
+      color: #64748b;
+      margin-bottom: 3px;
+      font-weight: 700;
+    }
+
+    .mini-card-value {
+      font-size: 11px;
+      color: #111827;
+      font-weight: 600;
+    }
+
+    .meta-table td {
+      border-bottom: 1px solid #eef2f7;
+      padding: 6px 4px;
+      vertical-align: top;
+    }
+
+    .meta-label {
+      width: 34%;
+      color: #64748b;
+      font-weight: 700;
+      font-size: 9px;
+    }
+
+    .meta-value { color: #111827; font-size: 10px; }
+
+    .text-block {
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      background: #ffffff;
+      padding: 10px 12px;
+      white-space: pre-wrap;
+    }
+
+    .table {
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .table th {
+      background: var(--section-bg);
+      color: var(--primary);
+      font-weight: 800;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      padding: 8px 7px;
+      border-bottom: 1px solid var(--section-border);
+      text-align: left;
+    }
+
+    .table td {
+      padding: 8px 7px;
+      border-bottom: 1px solid #edf2f7;
+      vertical-align: top;
+      font-size: 9.7px;
+    }
+
+    .table tr:last-child td { border-bottom: none; }
+
+    .case-banner {
+      border: 1px solid var(--section-border);
+      border-left: 4px solid var(--primary);
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: #f8fbff;
+      margin-bottom: 12px;
+    }
+
+    .case-title {
+      font-weight: 800;
+      color: var(--primary);
+      margin-bottom: 3px;
+    }
+
+    .timeline-row-time {
+      width: 20%;
+      white-space: nowrap;
+      color: #475569;
+      font-weight: 700;
+    }
+
+    .signature-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 10px;
+      margin: -10px;
+    }
+
+    .signature-box {
+      border: 1px solid #dbe2ea;
+      border-radius: 12px;
+      background: #ffffff;
+      padding: 10px;
+      vertical-align: top;
+      width: 33.33%;
+    }
+
+    .signature-role {
+      font-size: 9px;
+      text-transform: uppercase;
+      color: #64748b;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .signature-image-wrap {
+      height: 82px;
+      border: 1px dashed #cbd5e1;
+      border-radius: 8px;
+      background: #f8fafc;
+      display: block;
+      text-align: center;
+      margin-bottom: 8px;
+      padding: 6px;
+    }
+
+    .signature-image { max-height: 68px; max-width: 100%; }
+
+    .signature-refused {
+      font-size: 10px;
+      font-weight: 700;
+      color: #92400e;
+      padding-top: 24px;
+    }
+
+    .signature-meta div { margin-bottom: 2px; font-size: 9px; }
+
+    .legal-box {
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 9px 11px;
+      background: #fcfcfd;
+      margin-bottom: 8px;
+    }
+
+    .legal-title {
+      font-size: 9px;
+      font-weight: 800;
+      text-transform: uppercase;
+      color: #475569;
+      margin-bottom: 4px;
+    }
+
+    .verification-box {
+      border: 1px solid #d1d5db;
+      border-radius: 12px;
+      background: #ffffff;
+      padding: 12px;
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      margin-top: 10px;
+    }
+
+    .verification-qr {
+      width: 92px;
+      height: 92px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      background: #fff;
+      padding: 4px;
+      box-sizing: border-box;
+    }
+
+    .verification-meta {
+      flex: 1;
+      font-size: 9.5px;
+      color: #334155;
+      line-height: 1.45;
+    }
+
+    .verification-meta strong { color: #0f172a; }
+    .page-break { page-break-before: always; }
+  </style>
+</head>
+<body>
+  <div class="doc">
+
+    <div class="header">
+      <table class="header-table">
+        <tr>
+          <td class="header-left">
+            {% if payload.company.logo_url %}
+              <img class="logo" src="{{ payload.company.logo_url }}" alt="Logo empresa" />
+            {% endif %}
+            <div class="brand-name">{{ payload.company.legal_name or payload.company.name or "Empresa de ambulancias" }}</div>
+            <div class="brand-meta">
+              {{ payload.company.address or "" }}
+              {% if payload.company.city or payload.company.state %}
+                - {{ payload.company.city or "" }} {{ payload.company.state or "" }}
+              {% endif %}
+            </div>
+            <div class="brand-meta">
+              RFC: {{ payload.company.rfc or "N/D" }}
+              {% if payload.company.phone %} | Tel: {{ payload.company.phone }}{% endif %}
+              {% if payload.company.email %} | {{ payload.company.email }}{% endif %}
+            </div>
+            {% if payload.company.medical_director %}<div class="brand-meta">Director médico: {{ payload.company.medical_director }}</div>{% endif %}
+            {% if payload.company.license_number %}<div class="brand-meta">Licencia / permiso: {{ payload.company.license_number }}</div>{% endif %}
+          </td>
+          <td class="header-right">
+            <div class="folio-box">
+              <div class="folio-title">Folio / incidente</div>
+              <div class="folio-value">{{ payload.service.incident_number or payload.intake_id }}</div>
+            </div>
+            <div class="folio-box">
+              <div class="folio-title">Generado</div>
+              <div class="mini-card-value">{{ payload.generated_at_display or payload.generated_at|fmt_dt }}</div>
+            </div>
+            <div>
+              <span class="status-chip {% if not payload.ready_for_pdf %}warning{% endif %}">
+                {{ "Listo para PDF" if payload.ready_for_pdf else "Pendiente de validación" }}
+              </span>
+            </div>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="case-banner">
+      <div class="case-title">Tipo de cierre del servicio</div>
+      <div>
+        {% if payload.case_type == "handoff" %}Traslado y entrega hospitalaria
+        {% elif payload.case_type == "refusal" %}Negativa de atención / traslado
+        {% else %}Cierre no determinado{% endif %}
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Datos del servicio</div>
+      <table class="grid-2"><tr>
+        <td class="card"><table class="meta-table">
+          <tr><td class="meta-label">Tipo de servicio</td><td class="meta-value">{{ payload.service.service_type|display or "N/D" }}</td></tr>
+          <tr><td class="meta-label">Subtipo</td><td class="meta-value">{{ payload.service.service_subtype|display or "N/D" }}</td></tr>
+          <tr><td class="meta-label">Prioridad operativa</td><td class="meta-value">{{ payload.service.priority_operational|display or "N/D" }}</td></tr>
+          <tr><td class="meta-label">Prioridad clínica</td><td class="meta-value">{{ payload.service.priority_clinical|display or "N/D" }}</td></tr>
+          <tr><td class="meta-label">Ubicación</td><td class="meta-value">{{ payload.service.location_text|display or "N/D" }}</td></tr>
+          <tr><td class="meta-label">Referencia</td><td class="meta-value">{{ payload.service.location_reference|display or "N/D" }}</td></tr>
+          <tr><td class="meta-label">Fuente de llamada</td><td class="meta-value">{{ payload.service.call_source|display or "N/D" }}</td></tr>
+          <tr><td class="meta-label">Solicitante</td><td class="meta-value">{{ payload.service.caller_name|display or "N/D" }}</td></tr>
+          <tr><td class="meta-label">Teléfono solicitante</td><td class="meta-value">{{ payload.service.caller_phone|display or "N/D" }}</td></tr>
+        </table></td>
+        <td class="card"><table class="meta-table">
+          <tr><td class="meta-label">Servicio relacionado</td><td class="meta-value">{{ payload.service.service_record.id if payload.service.service_record else "N/D" }}</td></tr>
+          <tr><td class="meta-label">Unidad</td><td class="meta-value">{{ payload.service.unit.code if payload.service.unit else "N/D" }}</td></tr>
+          <tr><td class="meta-label">Destino sugerido</td><td class="meta-value">{{ payload.service.destination_suggested|display or "N/D" }}</td></tr>
+          <tr><td class="meta-label">Pacientes estimados</td><td class="meta-value">{{ payload.service.patient_count_estimated|display or "N/D" }}</td></tr>
+          <tr><td class="meta-label">Riesgo en escena</td><td class="meta-value">{{ payload.service.scene_risk|display or "N/D" }}</td></tr>
+          <tr><td class="meta-label">Tipo de pagador</td><td class="meta-value">{{ payload.service.payer_type|display or "N/D" }}</td></tr>
+          <tr><td class="meta-label">Creado</td><td class="meta-value">{{ payload.service.created_at_display or payload.service.created_at|fmt_dt }}</td></tr>
+          <tr><td class="meta-label">Actualizado</td><td class="meta-value">{{ payload.service.updated_at_display or payload.service.updated_at|fmt_dt }}</td></tr>
+          <tr><td class="meta-label">Notas</td><td class="meta-value">{{ payload.service.notes|display or "N/D" }}</td></tr>
+        </table></td>
+      </tr></table>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Datos del paciente</div>
+      <table class="grid-2"><tr>
+        <td class="card"><table class="meta-table">
+          <tr><td class="meta-label">Nombre</td><td class="meta-value">{{ payload.patient.patient_name|display or "N/N" }}</td></tr>
+          <tr><td class="meta-label">Edad</td><td class="meta-value">{{ payload.patient.patient_age|display or "N/D" }}</td></tr>
+          <tr><td class="meta-label">Sexo</td><td class="meta-value">{{ payload.patient.patient_sex|display or "N/D" }}</td></tr>
+          <tr><td class="meta-label">Fecha nacimiento</td><td class="meta-value">{{ payload.patient.patient_birth_date|display or "N/D" }}</td></tr>
+          <tr><td class="meta-label">Identificador</td><td class="meta-value">{{ payload.patient.patient_identifier|display or "N/D" }}</td></tr>
+          <tr><td class="meta-label">Dirección</td><td class="meta-value">{{ payload.patient.patient_address|display or "N/D" }}</td></tr>
+        </table></td>
+        <td class="card"><table class="meta-table">
+          <tr><td class="meta-label">Responsable</td><td class="meta-value">{{ payload.patient.responsible_name|display or "N/D" }}</td></tr>
+          <tr><td class="meta-label">Relación</td><td class="meta-value">{{ payload.patient.responsible_relationship|display or "N/D" }}</td></tr>
+          <tr><td class="meta-label">Teléfono</td><td class="meta-value">{{ payload.patient.responsible_phone|display or "N/D" }}</td></tr>
+          <tr><td class="meta-label">Motivo principal</td><td class="meta-value">{{ payload.clinical_summary.chief_complaint|display or "N/D" }}</td></tr>
+          <tr><td class="meta-label">Mecanismo lesión</td><td class="meta-value">{{ payload.clinical_summary.mechanism_of_injury|display or "N/D" }}</td></tr>
+          <tr><td class="meta-label">Impresión clínica</td><td class="meta-value">{{ payload.clinical_summary.clinical_impression|display or "N/D" }}</td></tr>
+        </table></td>
+      </tr></table>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Resumen clínico</div>
+      <table class="grid-2">
+        <tr>
+          <td><div class="mini-card"><div class="mini-card-title">Conciencia</div><div class="mini-card-value">{{ payload.clinical_summary.consciousness_level|display or "N/D" }}</div></div></td>
+          <td><div class="mini-card"><div class="mini-card-title">Vía aérea</div><div class="mini-card-value">{{ payload.clinical_summary.airway_status|display or "N/D" }}</div></div></td>
+        </tr>
+        <tr>
+          <td><div class="mini-card"><div class="mini-card-title">Respiración</div><div class="mini-card-value">{{ payload.clinical_summary.breathing_status|display or "N/D" }}</div></div></td>
+          <td><div class="mini-card"><div class="mini-card-title">Circulación</div><div class="mini-card-value">{{ payload.clinical_summary.circulation_status|display or "N/D" }}</div></div></td>
+        </tr>
+      </table>
+      {% if payload.clinical_summary.narrative %}<div class="text-block" style="margin-top:8px;">{{ payload.clinical_summary.narrative|display }}</div>{% endif %}
+    </div>
+
+    {% if payload.sections.assessment.included %}
+    <div class="section"><div class="section-title">{{ payload.sections.assessment.title }}</div><div class="card"><table class="meta-table">
+      {% for key, value in payload.sections.assessment.data.items() %}
+        {% if value not in [None, '', [], {}, false] and key not in ['id','company_id','intake_id','created_at','updated_at'] %}
+        <tr><td class="meta-label">{{ key|fmt_label }}</td><td class="meta-value">{{ value|display }}</td></tr>
+        {% endif %}
+      {% endfor %}
+    </table></div></div>
+    {% endif %}
+
+    {% if payload.sections.vital_signs.included %}
+    <div class="section"><div class="section-title">{{ payload.sections.vital_signs.title }}</div>
+      <table class="table"><thead><tr><th>Momento</th><th>TA</th><th>FC</th><th>FR</th><th>SpO2</th><th>Temp</th><th>Glucosa</th><th>Dolor</th><th>Pupilas</th><th>Notas</th></tr></thead><tbody>
+      {% for row in payload.sections.vital_signs.data %}
+      <tr>
+        <td>{{ row.taken_at_label|display or row.created_at|fmt_dt }}</td>
+        <td>{{ row.blood_pressure|display or '-' }}</td>
+        <td>{{ row.heart_rate|display or '-' }}</td>
+        <td>{{ row.respiratory_rate|display or '-' }}</td>
+        <td>{{ row.spo2|display or '-' }}</td>
+        <td>{{ row.temperature|display or '-' }}</td>
+        <td>{{ row.glucose|display or '-' }}</td>
+        <td>{{ row.pain_scale|display or '-' }}</td>
+        <td>{{ row.pupils|display or '-' }}</td>
+        <td>{{ row.notes|display or '-' }}</td>
+      </tr>
+      {% endfor %}
+      </tbody></table>
+    </div>
+    {% endif %}
+
+    {% if payload.sections.procedures.included %}
+    <div class="section"><div class="section-title">{{ payload.sections.procedures.title }}</div>
+      <table class="table"><thead><tr><th>Procedimiento</th><th>Estatus</th><th>Sitio corporal</th><th>Exitoso</th><th>Notas</th></tr></thead><tbody>
+      {% for row in payload.sections.procedures.data %}
+      <tr>
+        <td>{{ row.procedure_name|display or row.procedure|display or '-' }}</td>
+        <td>{{ row.status|display or '-' }}</td>
+        <td>{{ row.body_site|display or '-' }}</td>
+        <td>{{ row.successful|display or '-' }}</td>
+        <td>{{ row.notes|display or '-' }}</td>
+      </tr>
+      {% endfor %}
+      </tbody></table>
+    </div>
+    {% endif %}
+
+    {% if payload.sections.medications.included %}
+    <div class="section"><div class="section-title">{{ payload.sections.medications.title }}</div>
+      <table class="table"><thead><tr><th>Medicamento</th><th>Dosis</th><th>Vía</th><th>Respuesta</th><th>Notas</th></tr></thead><tbody>
+      {% for row in payload.sections.medications.data %}
+      <tr>
+        <td>{{ row.medication_name|display or row.medication|display or '-' }}</td>
+        <td>{{ row.dose|display or '-' }}</td>
+        <td>{{ row.route|display or '-' }}</td>
+        <td>{{ row.response|display or '-' }}</td>
+        <td>{{ row.notes|display or '-' }}</td>
+      </tr>
+      {% endfor %}
+      </tbody></table>
+    </div>
+    {% endif %}
+
+    {% for sec_key in ['trauma', 'body_map', 'pediatrics', 'cardio', 'pregnancy'] %}
+      {% set sec = payload.sections[sec_key] %}
+      {% if sec.included %}
+      <div class="section"><div class="section-title">{{ sec.title }}</div><div class="card"><table class="meta-table">
+        {% for key, value in sec.data.items() %}
+          {% if value not in [None, '', [], {}, false] and key not in ['id','company_id','intake_id','created_at','updated_at','active'] %}
+          <tr><td class="meta-label">{{ key|fmt_label }}</td><td class="meta-value">{{ value|fmt_dt if 'date' in key or key.endswith('_at') or key.endswith('_time') else value|display }}</td></tr>
+          {% endif %}
+        {% endfor %}
+      </table></div></div>
+      {% endif %}
+    {% endfor %}
+
+    {% if payload.sections.handoff.included %}
+    <div class="section"><div class="section-title">{{ payload.sections.handoff.title }}</div><div class="card"><table class="meta-table">
+      {% for key, value in payload.sections.handoff.data.items() %}
+        {% if value not in [None, '', [], {}, false] and key not in ['id','company_id','intake_id','created_at','updated_at'] %}
+        <tr><td class="meta-label">{{ key|fmt_label }}</td><td class="meta-value">{{ value|fmt_dt if 'date' in key or key.endswith('_at') or key.endswith('_time') else value|display }}</td></tr>
+        {% endif %}
+      {% endfor %}
+    </table></div></div>
+    {% endif %}
+
+    {% if payload.sections.refusal.included %}
+    <div class="section"><div class="section-title">{{ payload.sections.refusal.title }}</div><div class="card"><table class="meta-table">
+      {% for key, value in payload.sections.refusal.data.items() %}
+        {% if value not in [None, '', [], {}, false] and key not in ['id','company_id','intake_id','created_at','updated_at','active'] %}
+        <tr><td class="meta-label">{{ key|fmt_label }}</td><td class="meta-value">{{ value|display }}</td></tr>
+        {% endif %}
+      {% endfor %}
+    </table></div></div>
+    {% endif %}
+
+    {% if payload.timeline %}
+    <div class="section"><div class="section-title">Timeline clínico / operativo</div>
+      <table class="table"><thead><tr><th style="width:20%;">Fecha / hora</th><th style="width:24%;">Evento</th><th style="width:20%;">Estatus</th><th>Detalle</th></tr></thead><tbody>
+      {% for item in payload.timeline %}
+      <tr>
+        <td class="timeline-row-time">{{ item.created_at_display or item.created_at|fmt_dt }}</td>
+        <td>{{ item.label|display or item.event_type|display }}</td>
+        <td>{{ item.status_label|display or '-' }}</td>
+        <td>{% if item.detail_text %}{{ item.detail_text|display }}{% elif item.notes %}{{ item.notes|display }}{% else %}-{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody></table>
+    </div>
+    {% endif %}
+
+    {% if payload.signatures %}
+    <div class="section page-break"><div class="section-title">Firmas</div><table class="signature-table"><tr>
+      {% for sig in payload.signatures %}
+      <td class="signature-box">
+        <div class="signature-role">{{ sig.signature_role|sig_title }}</div>
+        <div class="signature-image-wrap">
+          {% if sig.refused_to_sign %}
+            <div class="signature-refused">Se negó a firmar</div>
+          {% elif sig.image_base64 %}
+            <img class="signature-image" src="{{ sig.image_base64 }}" alt="Firma" />
+          {% else %}
+            <div class="signature-refused">Sin firma capturada</div>
+          {% endif %}
+        </div>
+        <div class="signature-meta">
+          <div><strong>Nombre:</strong> {{ sig.signer_name|display or 'N/D' }}</div>
+          <div><strong>Rol:</strong> {{ sig.signer_role|display or 'N/D' }}</div>
+          {% if sig.signer_relation %}<div><strong>Relación:</strong> {{ sig.signer_relation|display }}</div>{% endif %}
+          <div><strong>Fecha/hora:</strong> {{ sig.signed_at_display or sig.signed_at|fmt_dt }}</div>
+          {% if sig.refused_to_sign and sig.refusal_reason %}<div><strong>Motivo:</strong> {{ sig.refusal_reason|display }}</div>{% endif %}
+        </div>
+      </td>
+      {% endfor %}
+    </tr></table></div>
+    {% endif %}
+
+    {% if payload.branding.include_verification_block and payload.verification %}
+    <div class="section">
+      <div class="section-title">{{ payload.verification.title or 'VERIFICACIÓN Y CONTROL DOCUMENTAL' }}</div>
+      <div class="legal-box"><div>{{ payload.verification.control_text|display }}</div></div>
+      <div class="verification-box">
+        {% if payload.verification.qr_image_data_uri %}
+        <img class="verification-qr" src="{{ payload.verification.qr_image_data_uri }}" alt="QR de verificación" />
+        {% endif %}
+        <div class="verification-meta">
+          <div><strong>Folio del servicio:</strong> {{ payload.service.incident_number or payload.intake_id }}</div>
+          <div><strong>Identificador del documento:</strong> {{ payload.verification.document_id }}</div>
+          <div><strong>Código de verificación:</strong> {{ payload.verification.hash_short }}</div>
+          <div><strong>Fecha de generación:</strong> {{ payload.verification.generated_at_display }}</div>
+          <div><strong>Zona horaria:</strong> {{ payload.verification.timezone_name }}</div>
+          {% if payload.verification.verification_url %}<div><strong>URL de validación:</strong> {{ payload.verification.verification_url }}</div>{% endif %}
+          <div style="margin-top:6px;">{{ payload.verification.qr_caption|display }}</div>
+          <div style="margin-top:8px;">{{ payload.verification.legal_legend|display }}</div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if payload.legal_blocks %}
+    <div class="section">
+      <div class="section-title">Leyendas y notas legales</div>
+      {% for block in payload.legal_blocks %}
+      <div class="legal-box">
+        <div class="legal-title">{{ block.title }}</div>
+        <div>{{ block.text|display }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+  </div>
+</body>
+</html>
