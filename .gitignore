@@ -52,3 +52,6 @@ infra/openapi.json
 # Backups adicionales
 *_bak_*/
 *_backup_*/
+
+# Configuración productiva con secretos
+infra/docker-compose.yml
