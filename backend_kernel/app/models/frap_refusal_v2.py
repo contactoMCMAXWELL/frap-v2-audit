@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from sqlalchemy import Boolean, ForeignKey, String, Text
+from datetime import datetime
+from typing import Optional
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -40,6 +43,8 @@ class FrapRefusalV2(Base):
     advised_return_precautions: Mapped[str] = mapped_column(Text, nullable=False, default="")
     signature_pending: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    refused_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at = created_at_col()
     updated_at = updated_at_col()

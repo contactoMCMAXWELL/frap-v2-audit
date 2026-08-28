@@ -26,7 +26,7 @@ class FrapAssessmentV2Base(BaseModel):
 
 
 class FrapAssessmentV2Upsert(FrapAssessmentV2Base):
-    pass
+    assessed_at: Optional[datetime] = None
 
 
 class FrapAssessmentV2Out(FrapAssessmentV2Base):
@@ -35,5 +35,6 @@ class FrapAssessmentV2Out(FrapAssessmentV2Base):
     id: UUID
     company_id: UUID
     intake_id: UUID
+    assessed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime

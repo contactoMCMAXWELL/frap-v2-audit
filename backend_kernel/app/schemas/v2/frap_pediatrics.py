@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -30,12 +31,14 @@ class FrapPediatricsV2Base(BaseModel):
 
 class FrapPediatricsV2Upsert(FrapPediatricsV2Base):
     intake_id: UUID
+    assessed_at: Optional[datetime] = None
 
 
 class FrapPediatricsV2Out(FrapPediatricsV2Base):
     id: UUID
     company_id: UUID
     intake_id: UUID
+    assessed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 

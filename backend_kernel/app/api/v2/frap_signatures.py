@@ -16,6 +16,11 @@ from app.schemas.v2.frap_signature import (
 )
 from app.services.frap_case_resolution import validate_case_signatures
 from app.services.license_guard import require_company_feature
+from app.services.retrospective_guard import (
+    is_retrospective_intake,
+    require_retrospective_timestamp,
+    require_retrospective_write_access,
+)
 from app.services.timeline_service import create_dispatch_event
 
 router = APIRouter(prefix="/v2/frap-signatures", tags=["v2-frap-signatures"])
@@ -143,7 +148,13 @@ def upsert_frap_signature(
     normalized_role = _normalize_signature_role(payload.signature_role)
     _require_sign_role(user, normalized_role)
     _validate_payload(payload, normalized_role, user)
-    _require_intake(db, company_id, payload.intake_id)
+
+    intake = _require_intake(
+        db,
+        company_id,
+        payload.intake_id,
+    )
+    require_retrospective_write_access(intake, user)
 
     row = (
         db.query(FrapSignatureV2)
@@ -154,6 +165,23 @@ def upsert_frap_signature(
         )
         .first()
     )
+
+    signed_at_was_sent = "signed_at" in payload.model_fields_set
+
+    if is_retrospective_intake(intake):
+        if signed_at_was_sent:
+            signed_at = payload.signed_at
+        else:
+            signed_at = row.signed_at if row is not None else None
+
+        if row is None or signed_at_was_sent:
+            require_retrospective_timestamp(
+                intake=intake,
+                value=signed_at,
+                field_name="signed_at",
+            )
+    else:
+        signed_at = payload.signed_at or _now_utc()
 
     if not row:
         row = FrapSignatureV2(
@@ -181,7 +209,7 @@ def upsert_frap_signature(
     row.geo_lng = payload.geo_lng
     row.geo_accuracy_m = payload.geo_accuracy_m
     row.meta_json = payload.meta_json or {}
-    row.signed_at = payload.signed_at or _now_utc()
+    row.signed_at = signed_at
 
     db.add(row)
     db.commit()
@@ -199,6 +227,7 @@ def upsert_frap_signature(
             "signer_role": row.signer_role,
             "refused_to_sign": row.refused_to_sign,
         },
+        occurred_at=row.signed_at,
     )
 
     return row

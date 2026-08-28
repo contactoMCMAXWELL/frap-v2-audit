@@ -10,6 +10,11 @@ from app.models.frap_cardio_v2 import FrapCardioV2
 from app.models.service_intake_v2 import ServiceIntakeV2
 from app.schemas.v2.frap_cardio import FrapCardioV2Out, FrapCardioV2Upsert
 from app.services.license_guard import require_company_feature
+from app.services.retrospective_guard import (
+    require_retrospective_timestamp,
+    require_retrospective_write_access,
+    validate_semantic_timestamp,
+)
 from app.services.timeline_service import create_dispatch_event
 
 router = APIRouter(prefix="/v2/frap-cardio", tags=["v2-frap-cardio"])
@@ -163,6 +168,8 @@ def upsert_frap_cardio(
     if not intake:
         raise HTTPException(status_code=404, detail="Intake not found")
 
+    require_retrospective_write_access(intake, user)
+
     row = (
         db.query(FrapCardioV2)
         .filter(
@@ -172,8 +179,28 @@ def upsert_frap_cardio(
         .first()
     )
 
+    assessed_at_was_sent = "assessed_at" in payload.model_fields_set
+
+    if assessed_at_was_sent:
+        assessed_at = validate_semantic_timestamp(
+            intake=intake,
+            user=user,
+            value=payload.assessed_at,
+            field_name="assessed_at",
+        )
+    else:
+        assessed_at = row.assessed_at if row is not None else None
+
+    if row is None or assessed_at_was_sent:
+        require_retrospective_timestamp(
+            intake=intake,
+            value=assessed_at,
+            field_name="assessed_at",
+        )
+
     data = payload.model_dump(exclude_unset=True)
     data.pop("intake_id", None)
+    data["assessed_at"] = assessed_at
 
     if not row:
         row = FrapCardioV2(
@@ -195,6 +222,7 @@ def upsert_frap_cardio(
         intake_id=payload.intake_id,
         event_type="clinical.cardio_updated",
         status_label="Evaluación cardiovascular actualizada",
+        occurred_at=row.assessed_at,
         payload={
             "summary": _build_summary(row),
             "status": _build_status(row),

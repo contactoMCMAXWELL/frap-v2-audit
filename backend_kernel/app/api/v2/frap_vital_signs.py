@@ -11,6 +11,11 @@ from app.models.frap_vital_sign_v2 import FrapVitalSignV2
 from app.models.service_intake_v2 import ServiceIntakeV2
 from app.schemas.v2.frap_vital_sign import FrapVitalSignV2Create, FrapVitalSignV2Out
 from app.services.license_guard import require_company_feature
+from app.services.retrospective_guard import (
+    require_retrospective_timestamp,
+    require_retrospective_write_access,
+    validate_semantic_timestamp,
+)
 from app.services.timeline_service import create_dispatch_event
 
 router = APIRouter(prefix="/v2/frap-vital-signs", tags=["v2-frap-vital-signs"])
@@ -56,10 +61,26 @@ def create_frap_vital_sign(
     if not intake:
         raise HTTPException(status_code=404, detail="Intake not found")
 
+    require_retrospective_write_access(intake, user)
+
+    taken_at = validate_semantic_timestamp(
+        intake=intake,
+        user=user,
+        value=payload.taken_at,
+        field_name="taken_at",
+    )
+
+    require_retrospective_timestamp(
+        intake=intake,
+        value=taken_at,
+        field_name="taken_at",
+    )
+
     row = FrapVitalSignV2(
         company_id=company_id,
         intake_id=payload.intake_id,
         taken_at_label=payload.taken_at_label,
+        taken_at=taken_at,
         blood_pressure=payload.blood_pressure,
         heart_rate=payload.heart_rate,
         respiratory_rate=payload.respiratory_rate,
@@ -86,6 +107,7 @@ def create_frap_vital_sign(
             "heart_rate": payload.heart_rate,
             "spo2": payload.spo2,
         },
+        occurred_at=row.taken_at,
     )
 
     return row

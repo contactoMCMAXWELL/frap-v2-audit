@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -23,12 +24,14 @@ class FrapRefusalV2Base(BaseModel):
 
 class FrapRefusalV2Upsert(FrapRefusalV2Base):
     intake_id: UUID
+    refused_at: Optional[datetime] = None
 
 
 class FrapRefusalV2Out(FrapRefusalV2Base):
     id: UUID
     company_id: UUID
     intake_id: UUID
+    refused_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 

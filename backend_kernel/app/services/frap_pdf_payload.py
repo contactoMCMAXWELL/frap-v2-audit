@@ -542,10 +542,14 @@ def _timeline_detail_text(row: ServiceDispatchEventV2) -> str:
 
 def _timeline_item(row: ServiceDispatchEventV2, timezone_name: str) -> dict[str, Any]:
     payload = row.event_payload or {}
+    event_time = row.occurred_at or row.created_at
     return {
         "id": str(row.id),
-        "created_at": _serialize(row.created_at),
-        "created_at_display": _local_dt_str(row.created_at, timezone_name),
+        "created_at": _serialize(event_time),
+        "created_at_display": _local_dt_str(event_time, timezone_name),
+        "occurred_at": _serialize(row.occurred_at),
+        "recorded_at": _serialize(row.created_at),
+        "recorded_at_display": _local_dt_str(row.created_at, timezone_name),
         "event_type": row.event_type,
         "label": OPERATIONAL_EVENT_LABELS.get(row.event_type, str(row.status_label or row.event_type or "").strip()),
         "status_label": _translate_detail_value(str(row.status_label or "").strip()),
@@ -812,10 +816,64 @@ def build_frap_pdf_payload(db: Session, company_id: UUID, intake_id: UUID) -> di
     cardio_data = _clean_dict(_row_to_dict(cardio))
     pregnancy_data = _clean_dict(_row_to_dict(pregnancy))
 
+    semantic_section_dates = [
+        (assessment_data, "assessed_at"),
+        (trauma_data, "assessed_at"),
+        (body_map_data, "assessed_at"),
+        (pediatrics_data, "assessed_at"),
+        (cardio_data, "assessed_at"),
+        (pregnancy_data, "assessed_at"),
+        (refusal_data, "refused_at"),
+        (handoff_data, "handoff_at"),
+    ]
+
+    for section_data, field_name in semantic_section_dates:
+        if section_data:
+            section_data[f"{field_name}_display"] = _local_dt_str(
+                section_data.get(field_name),
+                timezone_name,
+            )
+
     vital_signs_data = [_clean_dict(_row_to_dict(x) or {}) for x in vital_signs]
     procedures_data = [_clean_dict(_row_to_dict(x) or {}) for x in procedures]
     medications_data = [_clean_dict(_row_to_dict(x) or {}) for x in medications]
+
+    for row in vital_signs_data:
+        row["taken_at_display"] = _local_dt_str(
+            row.get("taken_at") or row.get("created_at"),
+            timezone_name,
+        )
+
+    for row in procedures_data:
+        row["performed_at_display"] = _local_dt_str(
+            row.get("performed_at") or row.get("created_at"),
+            timezone_name,
+        )
+
+    for row in medications_data:
+        row["administered_at_display"] = _local_dt_str(
+            row.get("administered_at") or row.get("created_at"),
+            timezone_name,
+        )
+
+    vital_signs_data.sort(
+        key=lambda x: _coerce_datetime(x.get("taken_at") or x.get("created_at"))
+        or datetime.min.replace(tzinfo=timezone.utc)
+    )
+    procedures_data.sort(
+        key=lambda x: _coerce_datetime(x.get("performed_at") or x.get("created_at"))
+        or datetime.min.replace(tzinfo=timezone.utc)
+    )
+    medications_data.sort(
+        key=lambda x: _coerce_datetime(x.get("administered_at") or x.get("created_at"))
+        or datetime.min.replace(tzinfo=timezone.utc)
+    )
+
     timeline_data = [_timeline_item(x, timezone_name) for x in events]
+    timeline_data.sort(
+        key=lambda x: _coerce_datetime(x.get("created_at"))
+        or datetime.min.replace(tzinfo=timezone.utc)
+    )
 
     signatures_data = sorted([_clean_dict(_row_to_dict(x) or {}) for x in signatures], key=lambda x: _signature_sort_key(x.get("signature_role")))
     for sig in signatures_data:
@@ -884,6 +942,13 @@ def build_frap_pdf_payload(db: Session, company_id: UUID, intake_id: UUID) -> di
             "is_ready_for_pdf": bool(validation.get("is_ready_for_pdf")),
             "missing_signature_roles": validation.get("missing_signature_roles") or [],
             "inconsistency": validation.get("inconsistency"),
+            "requires_retrospective_approval": bool(
+                validation.get("requires_retrospective_approval")
+            ),
+            "is_retrospective_approved": bool(
+                validation.get("is_retrospective_approved")
+            ),
+            "approval_missing": bool(validation.get("approval_missing")),
         },
         "generated_at": generated_at,
         "generated_at_display": _local_dt_str(generated_at, timezone_name),

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -24,12 +25,14 @@ class FrapTraumaV2Base(BaseModel):
 
 class FrapTraumaV2Upsert(FrapTraumaV2Base):
     intake_id: UUID
+    assessed_at: Optional[datetime] = None
 
 
 class FrapTraumaV2Out(FrapTraumaV2Base):
     id: UUID
     company_id: UUID
     intake_id: UUID
+    assessed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 

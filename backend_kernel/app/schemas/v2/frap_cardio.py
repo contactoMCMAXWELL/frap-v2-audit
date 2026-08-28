@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -48,6 +49,7 @@ class FrapCardioV2Base(BaseModel):
 
 class FrapCardioV2Upsert(FrapCardioV2Base):
     intake_id: UUID
+    assessed_at: Optional[datetime] = None
 
 
 class FrapCardioV2Out(FrapCardioV2Base):
@@ -56,5 +58,6 @@ class FrapCardioV2Out(FrapCardioV2Base):
     id: UUID
     company_id: UUID
     intake_id: UUID
+    assessed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime

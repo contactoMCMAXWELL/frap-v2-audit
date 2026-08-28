@@ -18,6 +18,13 @@ from app.schemas.v2.service_intake import (
     ServiceIntakeV2Update,
 )
 from app.services.company_license_service import CompanyLicenseService
+from app.services.retrospective_guard import (
+    RETROSPECTIVE_CAPTURE_MODE,
+    require_retrospective_role,
+    require_retrospective_write_access,
+    validate_capture_mode,
+    validate_semantic_timestamp,
+)
 
 router = APIRouter(prefix="/v2/service-intake", tags=["v2-service-intake"])
 
@@ -300,6 +307,34 @@ def create_service_intake(
 ):
     _enforce_monthly_service_limit(db, company_id)
 
+    capture_mode = validate_capture_mode(payload.capture_mode)
+
+    if capture_mode == RETROSPECTIVE_CAPTURE_MODE:
+        require_retrospective_role(user)
+
+        if payload.occurred_at is None:
+            raise HTTPException(
+                status_code=422,
+                detail="occurred_at es obligatorio en captura retrospectiva",
+            )
+    elif payload.occurred_at is not None:
+        raise HTTPException(
+            status_code=422,
+            detail="occurred_at sólo puede declararse en captura retrospectiva",
+        )
+
+    if (
+        capture_mode != RETROSPECTIVE_CAPTURE_MODE
+        and str(payload.retrospective_reason or "").strip()
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "retrospective_reason sólo aplica "
+                "a captura retrospectiva"
+            ),
+        )
+
     if payload.service_id:
         svc = (
             db.query(Service)
@@ -310,9 +345,16 @@ def create_service_intake(
         if not svc:
             raise HTTPException(status_code=404, detail="Linked service not found")
 
+    data = payload.model_dump()
+    data["capture_mode"] = capture_mode
+
+    if capture_mode == RETROSPECTIVE_CAPTURE_MODE:
+        data["retrospective_started_by_user_id"] = getattr(user, "id", None)
+        data["retrospective_started_at"] = datetime.now(timezone.utc)
+
     row = ServiceIntakeV2(
         company_id=company_id,
-        **payload.model_dump(),
+        **data,
     )
 
     db.add(row)
@@ -328,9 +370,60 @@ def create_service_intake(
         status_label=DISPATCH_EVENT_LABELS["service_created"],
         notes=(row.notes or "").strip(),
         event_payload={},
+        occurred_at=row.occurred_at,
     )
     db.add(created_event)
     db.commit()
+
+    return row
+
+
+@router.post(
+    "/{intake_id}/approve-retrospective",
+    response_model=ServiceIntakeV2Out,
+)
+def approve_retrospective_service_intake(
+    intake_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+    company_id: uuid.UUID = Depends(get_company_id),
+):
+    require_retrospective_role(user)
+
+    row = (
+        db.query(ServiceIntakeV2)
+        .filter(
+            ServiceIntakeV2.id == intake_id,
+            ServiceIntakeV2.company_id == company_id,
+        )
+        .first()
+    )
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Service intake not found")
+
+    if validate_capture_mode(row.capture_mode) != RETROSPECTIVE_CAPTURE_MODE:
+        raise HTTPException(
+            status_code=409,
+            detail="Sólo una captura retrospectiva puede aprobarse",
+        )
+
+    if row.approved_at is not None or row.approved_by_user_id is not None:
+        return row
+
+    user_id = getattr(user, "id", None)
+    if user_id is None:
+        raise HTTPException(
+            status_code=403,
+            detail="No fue posible identificar al usuario aprobador",
+        )
+
+    row.approved_by_user_id = user_id
+    row.approved_at = datetime.now(timezone.utc)
+
+    db.add(row)
+    db.commit()
+    db.refresh(row)
 
     return row
 
@@ -353,6 +446,43 @@ def update_service_intake(
         raise HTTPException(status_code=404, detail="Service intake not found")
 
     changes = payload.model_dump(exclude_unset=True)
+
+    require_retrospective_write_access(row, user)
+
+    if "capture_mode" in changes:
+        requested_mode = validate_capture_mode(changes["capture_mode"])
+        current_mode = validate_capture_mode(row.capture_mode)
+
+        if requested_mode != current_mode:
+            raise HTTPException(
+                status_code=422,
+                detail="capture_mode no puede modificarse después de crear el intake",
+            )
+
+        changes.pop("capture_mode", None)
+
+    if "occurred_at" in changes:
+        if (
+            row.capture_mode == RETROSPECTIVE_CAPTURE_MODE
+            and changes["occurred_at"] is None
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="occurred_at no puede eliminarse de una captura retrospectiva",
+            )
+
+        changes["occurred_at"] = validate_semantic_timestamp(
+            intake=row,
+            user=user,
+            value=changes["occurred_at"],
+            field_name="occurred_at",
+        )
+
+    if "retrospective_reason" in changes and not row.capture_mode == RETROSPECTIVE_CAPTURE_MODE:
+        raise HTTPException(
+            status_code=422,
+            detail="retrospective_reason sólo aplica a captura retrospectiva",
+        )
 
     if "service_id" in changes and changes["service_id"]:
         svc = (

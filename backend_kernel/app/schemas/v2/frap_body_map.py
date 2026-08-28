@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -17,7 +17,7 @@ class FrapBodyMapV2Base(BaseModel):
 
 
 class FrapBodyMapV2Upsert(FrapBodyMapV2Base):
-    pass
+    assessed_at: Optional[datetime] = None
 
 
 class FrapBodyMapV2Out(FrapBodyMapV2Base):
@@ -26,5 +26,6 @@ class FrapBodyMapV2Out(FrapBodyMapV2Base):
     id: UUID
     company_id: UUID
     intake_id: UUID
+    assessed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime

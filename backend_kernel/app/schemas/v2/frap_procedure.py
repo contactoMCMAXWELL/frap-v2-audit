@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -16,12 +17,14 @@ class FrapProcedureV2Base(BaseModel):
 
 class FrapProcedureV2Create(FrapProcedureV2Base):
     intake_id: UUID
+    performed_at: Optional[datetime] = None
 
 
 class FrapProcedureV2Out(FrapProcedureV2Base):
     id: UUID
     company_id: UUID
     intake_id: UUID
+    performed_at: Optional[datetime] = None
     created_at: datetime
 
     class Config:

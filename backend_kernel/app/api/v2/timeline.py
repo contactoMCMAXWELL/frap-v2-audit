@@ -408,7 +408,7 @@ def get_intake_timeline(
                 or "Evento operativo",
                 subtitle=subtitle,
                 notes=_safe_text(row.notes),
-                created_at=row.created_at,
+                created_at=row.occurred_at or row.created_at,
                 unit_id=str(row.unit_id) if row.unit_id else None,
                 unit_code=unit_code or None,
                 event_payload=payload,
@@ -679,7 +679,7 @@ def get_intake_timeline(
                 or "Evento clínico",
                 subtitle=subtitle,
                 notes=_safe_text(row.notes),
-                created_at=row.created_at,
+                created_at=row.occurred_at or row.created_at,
                 unit_id=str(row.unit_id) if row.unit_id else None,
                 unit_code=unit_code or None,
                 event_payload=payload,
@@ -729,7 +729,7 @@ def get_intake_timeline(
             title="Signos vitales registrados",
             subtitle=subtitle,
             notes=_compact_join([_safe_text(getattr(row, "notes", None))]),
-            created_at=row.created_at,
+            created_at=row.taken_at or row.created_at,
             detail_items=details,
         )
 
@@ -794,7 +794,7 @@ def get_intake_timeline(
             title=procedure_name,
             subtitle=subtitle,
             notes=_safe_text(getattr(row, "notes", None)),
-            created_at=row.created_at,
+            created_at=row.performed_at or row.created_at,
             detail_items=details,
         )
 
@@ -850,7 +850,7 @@ def get_intake_timeline(
             title=medication_name,
             subtitle=subtitle,
             notes=_safe_text(getattr(row, "notes", None)),
-            created_at=row.created_at,
+            created_at=row.administered_at or row.created_at,
             detail_items=details,
         )
 
@@ -948,7 +948,7 @@ def get_intake_timeline(
             title="Evaluación de trauma registrada",
             subtitle=subtitle,
             notes=_safe_text(getattr(row, "notes", None)),
-            created_at=row.created_at,
+            created_at=row.assessed_at or row.created_at,
             detail_items=details,
         )
 
@@ -987,7 +987,7 @@ def get_intake_timeline(
             title="Negativa de atención registrada",
             subtitle=subtitle,
             notes=_safe_text(getattr(row, "notes", None)),
-            created_at=row.created_at,
+            created_at=row.refused_at or row.created_at,
             detail_items=details,
         )
 

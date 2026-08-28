@@ -14,6 +14,11 @@ from app.schemas.v2.frap_medication import (
     FrapMedicationV2Out,
 )
 from app.services.license_guard import require_company_feature
+from app.services.retrospective_guard import (
+    require_retrospective_timestamp,
+    require_retrospective_write_access,
+    validate_semantic_timestamp,
+)
 from app.services.timeline_service import create_dispatch_event
 
 router = APIRouter(prefix="/v2/frap-medications", tags=["v2-frap-medications"])
@@ -59,10 +64,26 @@ def create_frap_medication(
     if not intake:
         raise HTTPException(status_code=404, detail="Intake not found")
 
+    require_retrospective_write_access(intake, user)
+
+    administered_at = validate_semantic_timestamp(
+        intake=intake,
+        user=user,
+        value=payload.administered_at,
+        field_name="administered_at",
+    )
+
+    require_retrospective_timestamp(
+        intake=intake,
+        value=administered_at,
+        field_name="administered_at",
+    )
+
     row = FrapMedicationV2(
         company_id=company_id,
         intake_id=payload.intake_id,
         medication_name=payload.medication_name,
+        administered_at=administered_at,
         dose=payload.dose,
         route=payload.route,
         response=payload.response,
@@ -84,6 +105,7 @@ def create_frap_medication(
             "dose": payload.dose,
             "route": payload.route,
         },
+        occurred_at=row.administered_at,
     )
 
     return row

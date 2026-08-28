@@ -437,8 +437,17 @@
     {% if payload.sections.assessment.included %}
     <div class="section"><div class="section-title">{{ payload.sections.assessment.title }}</div><div class="card"><table class="meta-table">
       {% for key, value in payload.sections.assessment.data.items() %}
-        {% if value not in [None, '', [], {}, false] and key not in ['id','company_id','intake_id','created_at','updated_at'] %}
-        <tr><td class="meta-label">{{ key|fmt_label }}</td><td class="meta-value">{{ value|display }}</td></tr>
+        {% if value not in [None, '', [], {}, false] and key not in ['id','company_id','intake_id','created_at','updated_at'] and not key.endswith('_display') %}
+        <tr>
+          <td class="meta-label">{{ key|fmt_label }}</td>
+          <td class="meta-value">
+            {% if key.endswith('_at') and payload.sections.assessment.data.get(key ~ '_display') %}
+              {{ payload.sections.assessment.data.get(key ~ '_display') }}
+            {% else %}
+              {{ value|display }}
+            {% endif %}
+          </td>
+        </tr>
         {% endif %}
       {% endfor %}
     </table></div></div>
@@ -449,7 +458,10 @@
       <table class="table"><thead><tr><th>Momento</th><th>TA</th><th>FC</th><th>FR</th><th>SpO2</th><th>Temp</th><th>Glucosa</th><th>Dolor</th><th>Pupilas</th><th>Notas</th></tr></thead><tbody>
       {% for row in payload.sections.vital_signs.data %}
       <tr>
-        <td>{{ row.taken_at_label|display or row.created_at|fmt_dt }}</td>
+        <td>
+          {{ row.taken_at_display or '-' }}
+          {% if row.taken_at_label %}<br>{{ row.taken_at_label|display }}{% endif %}
+        </td>
         <td>{{ row.blood_pressure|display or '-' }}</td>
         <td>{{ row.heart_rate|display or '-' }}</td>
         <td>{{ row.respiratory_rate|display or '-' }}</td>
@@ -467,9 +479,10 @@
 
     {% if payload.sections.procedures.included %}
     <div class="section"><div class="section-title">{{ payload.sections.procedures.title }}</div>
-      <table class="table"><thead><tr><th>Procedimiento</th><th>Estatus</th><th>Sitio corporal</th><th>Exitoso</th><th>Notas</th></tr></thead><tbody>
+      <table class="table"><thead><tr><th>Fecha / hora</th><th>Procedimiento</th><th>Estatus</th><th>Sitio corporal</th><th>Exitoso</th><th>Notas</th></tr></thead><tbody>
       {% for row in payload.sections.procedures.data %}
       <tr>
+        <td>{{ row.performed_at_display or '-' }}</td>
         <td>{{ row.procedure_name|display or row.procedure|display or '-' }}</td>
         <td>{{ row.status|display or '-' }}</td>
         <td>{{ row.body_site|display or '-' }}</td>
@@ -483,9 +496,10 @@
 
     {% if payload.sections.medications.included %}
     <div class="section"><div class="section-title">{{ payload.sections.medications.title }}</div>
-      <table class="table"><thead><tr><th>Medicamento</th><th>Dosis</th><th>Vía</th><th>Respuesta</th><th>Notas</th></tr></thead><tbody>
+      <table class="table"><thead><tr><th>Fecha / hora</th><th>Medicamento</th><th>Dosis</th><th>Vía</th><th>Respuesta</th><th>Notas</th></tr></thead><tbody>
       {% for row in payload.sections.medications.data %}
       <tr>
+        <td>{{ row.administered_at_display or '-' }}</td>
         <td>{{ row.medication_name|display or row.medication|display or '-' }}</td>
         <td>{{ row.dose|display or '-' }}</td>
         <td>{{ row.route|display or '-' }}</td>
@@ -502,8 +516,17 @@
       {% if sec.included %}
       <div class="section"><div class="section-title">{{ sec.title }}</div><div class="card"><table class="meta-table">
         {% for key, value in sec.data.items() %}
-          {% if value not in [None, '', [], {}, false] and key not in ['id','company_id','intake_id','created_at','updated_at','active'] %}
-          <tr><td class="meta-label">{{ key|fmt_label }}</td><td class="meta-value">{{ value|fmt_dt if 'date' in key or key.endswith('_at') or key.endswith('_time') else value|display }}</td></tr>
+          {% if value not in [None, '', [], {}, false] and key not in ['id','company_id','intake_id','created_at','updated_at','active'] and not key.endswith('_display') %}
+          <tr>
+            <td class="meta-label">{{ key|fmt_label }}</td>
+            <td class="meta-value">
+              {% if key.endswith('_at') and sec.data.get(key ~ '_display') %}
+                {{ sec.data.get(key ~ '_display') }}
+              {% else %}
+                {{ value|fmt_dt if 'date' in key or key.endswith('_at') or key.endswith('_time') else value|display }}
+              {% endif %}
+            </td>
+          </tr>
           {% endif %}
         {% endfor %}
       </table></div></div>
@@ -513,8 +536,17 @@
     {% if payload.sections.handoff.included %}
     <div class="section"><div class="section-title">{{ payload.sections.handoff.title }}</div><div class="card"><table class="meta-table">
       {% for key, value in payload.sections.handoff.data.items() %}
-        {% if value not in [None, '', [], {}, false] and key not in ['id','company_id','intake_id','created_at','updated_at'] %}
-        <tr><td class="meta-label">{{ key|fmt_label }}</td><td class="meta-value">{{ value|fmt_dt if 'date' in key or key.endswith('_at') or key.endswith('_time') else value|display }}</td></tr>
+        {% if value not in [None, '', [], {}, false] and key not in ['id','company_id','intake_id','created_at','updated_at'] and not key.endswith('_display') %}
+        <tr>
+          <td class="meta-label">{{ key|fmt_label }}</td>
+          <td class="meta-value">
+            {% if key.endswith('_at') and payload.sections.handoff.data.get(key ~ '_display') %}
+              {{ payload.sections.handoff.data.get(key ~ '_display') }}
+            {% else %}
+              {{ value|fmt_dt if 'date' in key or key.endswith('_at') or key.endswith('_time') else value|display }}
+            {% endif %}
+          </td>
+        </tr>
         {% endif %}
       {% endfor %}
     </table></div></div>
@@ -523,8 +555,17 @@
     {% if payload.sections.refusal.included %}
     <div class="section"><div class="section-title">{{ payload.sections.refusal.title }}</div><div class="card"><table class="meta-table">
       {% for key, value in payload.sections.refusal.data.items() %}
-        {% if value not in [None, '', [], {}, false] and key not in ['id','company_id','intake_id','created_at','updated_at','active'] %}
-        <tr><td class="meta-label">{{ key|fmt_label }}</td><td class="meta-value">{{ value|display }}</td></tr>
+        {% if value not in [None, '', [], {}, false] and key not in ['id','company_id','intake_id','created_at','updated_at','active'] and not key.endswith('_display') %}
+        <tr>
+          <td class="meta-label">{{ key|fmt_label }}</td>
+          <td class="meta-value">
+            {% if key.endswith('_at') and payload.sections.refusal.data.get(key ~ '_display') %}
+              {{ payload.sections.refusal.data.get(key ~ '_display') }}
+            {% else %}
+              {{ value|display }}
+            {% endif %}
+          </td>
+        </tr>
         {% endif %}
       {% endfor %}
     </table></div></div>

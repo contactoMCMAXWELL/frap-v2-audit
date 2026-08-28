@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.models.frap_handoff_v2 import FrapHandoffV2
 from app.models.frap_refusal_v2 import FrapRefusalV2
 from app.models.frap_signature_v2 import FrapSignatureV2
+from app.models.service_intake_v2 import ServiceIntakeV2
 
 
 def _has_meaningful_refusal(row: FrapRefusalV2 | None) -> bool:
@@ -76,6 +77,26 @@ def resolve_case_type(db: Session, company_id, intake_id) -> tuple[str, str | No
 def validate_case_signatures(db: Session, company_id, intake_id) -> dict:
     case_type, inconsistency = resolve_case_type(db, company_id, intake_id)
 
+    intake = (
+        db.query(ServiceIntakeV2)
+        .filter(
+            ServiceIntakeV2.company_id == company_id,
+            ServiceIntakeV2.id == intake_id,
+        )
+        .first()
+    )
+
+    is_retrospective = (
+        str(getattr(intake, "capture_mode", "") or "").strip().lower()
+        == "retrospective"
+    )
+    is_retrospective_approved = bool(
+        intake
+        and intake.approved_by_user_id is not None
+        and intake.approved_at is not None
+    )
+    approval_missing = is_retrospective and not is_retrospective_approved
+
     rows = (
         db.query(FrapSignatureV2)
         .filter(
@@ -116,10 +137,19 @@ def validate_case_signatures(db: Session, company_id, intake_id) -> dict:
     else:
         missing = []
 
+    base_ready_for_pdf = (
+        case_type in {"refusal", "handoff"}
+        and not missing
+        and not inconsistency
+    )
+
     return {
         "intake_id": intake_id,
         "case_type": case_type,
-        "is_ready_for_pdf": case_type in {"refusal", "handoff"} and not missing and not inconsistency,
+        "is_ready_for_pdf": base_ready_for_pdf and not approval_missing,
         "missing_signature_roles": missing,
         "inconsistency": inconsistency,
+        "requires_retrospective_approval": is_retrospective,
+        "is_retrospective_approved": is_retrospective_approved,
+        "approval_missing": approval_missing,
     }

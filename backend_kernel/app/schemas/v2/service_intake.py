@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Optional
 from uuid import UUID
 
@@ -35,10 +36,16 @@ class ServiceIntakeV2Base(BaseModel):
 
 
 class ServiceIntakeV2Create(ServiceIntakeV2Base):
-    pass
+    capture_mode: str = "realtime"
+    occurred_at: Optional[datetime] = None
+    retrospective_reason: Optional[str] = None
 
 
 class ServiceIntakeV2Update(BaseModel):
+    capture_mode: Optional[str] = None
+    occurred_at: Optional[datetime] = None
+    retrospective_reason: Optional[str] = None
+
     incident_number: Optional[str] = None
     service_type: Optional[str] = None
     service_subtype: Optional[str] = None
@@ -63,6 +70,14 @@ class ServiceIntakeV2Update(BaseModel):
 class ServiceIntakeV2Out(ServiceIntakeV2Base):
     id: UUID
     company_id: UUID
+
+    capture_mode: str
+    occurred_at: Optional[datetime] = None
+    retrospective_reason: Optional[str] = None
+    retrospective_started_by_user_id: Optional[UUID] = None
+    retrospective_started_at: Optional[datetime] = None
+    approved_by_user_id: Optional[UUID] = None
+    approved_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

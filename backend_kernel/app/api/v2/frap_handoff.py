@@ -10,6 +10,10 @@ from app.models.frap_handoff_v2 import FrapHandoffV2
 from app.models.service_intake_v2 import ServiceIntakeV2
 from app.schemas.v2.frap_handoff import FrapHandoffOut, FrapHandoffUpsert
 from app.services.license_guard import require_company_feature
+from app.services.retrospective_guard import (
+    require_retrospective_timestamp,
+    require_retrospective_write_access,
+)
 from app.services.timeline_service import create_dispatch_event
 
 router = APIRouter(prefix="/v2/frap-handoff", tags=["v2-frap-handoff"])
@@ -60,6 +64,8 @@ def upsert_handoff(
     if not intake:
         raise HTTPException(status_code=404, detail="Intake not found")
 
+    require_retrospective_write_access(intake, user)
+
     row = (
         db.query(FrapHandoffV2)
         .filter(
@@ -68,6 +74,20 @@ def upsert_handoff(
         )
         .first()
     )
+
+    handoff_at_was_sent = "handoff_at" in payload.model_fields_set
+
+    if handoff_at_was_sent:
+        handoff_at = payload.handoff_at
+    else:
+        handoff_at = row.handoff_at if row is not None else None
+
+    if row is None or handoff_at_was_sent:
+        require_retrospective_timestamp(
+            intake=intake,
+            value=handoff_at,
+            field_name="handoff_at",
+        )
 
     if not row:
         row = FrapHandoffV2(
@@ -91,6 +111,7 @@ def upsert_handoff(
         intake_id=payload.intake_id,
         event_type="clinical.handoff_completed",
         status_label="Entrega de paciente registrada",
+        occurred_at=row.handoff_at,
     )
 
     return row

@@ -13,6 +13,11 @@ from app.schemas.frap_assessment_v2 import (
     FrapAssessmentV2Out,
     FrapAssessmentV2Upsert,
 )
+from app.services.retrospective_guard import (
+    require_retrospective_timestamp,
+    require_retrospective_write_access,
+    validate_semantic_timestamp,
+)
 
 router = APIRouter(prefix="/v2/frap-assessment", tags=["v2-frap-assessment"])
 
@@ -80,6 +85,8 @@ def upsert_assessment(
 ):
     intake = _get_intake_or_404(db, intake_id, company_id)
 
+    require_retrospective_write_access(intake, current_user)
+
     assessment = (
         db.query(FrapAssessmentV2)
         .filter(
@@ -89,7 +96,31 @@ def upsert_assessment(
         .first()
     )
 
+    assessed_at_was_sent = "assessed_at" in payload.model_fields_set
+
+    if assessed_at_was_sent:
+        assessed_at = validate_semantic_timestamp(
+            intake=intake,
+            user=current_user,
+            value=payload.assessed_at,
+            field_name="assessed_at",
+        )
+    else:
+        assessed_at = (
+            assessment.assessed_at
+            if assessment is not None
+            else None
+        )
+
+    if assessment is None or assessed_at_was_sent:
+        require_retrospective_timestamp(
+            intake=intake,
+            value=assessed_at,
+            field_name="assessed_at",
+        )
+
     data = payload.model_dump()
+    data["assessed_at"] = assessed_at
 
     if assessment is None:
         assessment = FrapAssessmentV2(
@@ -124,6 +155,7 @@ def upsert_assessment(
         service_id=getattr(intake, "service_id", None),
         unit_id=getattr(intake, "unit_id", None),
         event_type="clinical.assessment_updated",
+        occurred_at=assessment.assessed_at,
         status_label="Evaluacion clinica actualizada",
         notes="Assessment V2 guardado/actualizado",
         event_payload={

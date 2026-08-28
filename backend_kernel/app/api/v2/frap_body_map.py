@@ -13,6 +13,11 @@ from app.schemas.v2.frap_body_map import (
     FrapBodyMapV2Out,
     FrapBodyMapV2Upsert,
 )
+from app.services.retrospective_guard import (
+    require_retrospective_timestamp,
+    require_retrospective_write_access,
+    validate_semantic_timestamp,
+)
 
 router = APIRouter(prefix="/v2/frap-body-map", tags=["v2-frap-body-map"])
 
@@ -95,6 +100,8 @@ def upsert_body_map(
 ):
     intake = _get_intake_or_404(db, intake_id, company_id)
 
+    require_retrospective_write_access(intake, current_user)
+
     record = (
         db.query(FrapBodyMapV2)
         .filter(
@@ -104,7 +111,31 @@ def upsert_body_map(
         .first()
     )
 
+    assessed_at_was_sent = "assessed_at" in payload.model_fields_set
+
+    if assessed_at_was_sent:
+        assessed_at = validate_semantic_timestamp(
+            intake=intake,
+            user=current_user,
+            value=payload.assessed_at,
+            field_name="assessed_at",
+        )
+    else:
+        assessed_at = (
+            record.assessed_at
+            if record is not None
+            else None
+        )
+
+    if record is None or assessed_at_was_sent:
+        require_retrospective_timestamp(
+            intake=intake,
+            value=assessed_at,
+            field_name="assessed_at",
+        )
+
     data = payload.model_dump()
+    data["assessed_at"] = assessed_at
     computed_summary = _build_summary(payload)
     if not data.get("summary"):
         data["summary"] = computed_summary
@@ -128,6 +159,7 @@ def upsert_body_map(
         service_id=getattr(intake, "service_id", None),
         unit_id=getattr(intake, "unit_id", None),
         event_type="clinical.body_map_updated",
+        occurred_at=record.assessed_at,
         status_label="Lesiones corporales actualizadas",
         notes="Body Map V2 guardado/actualizado",
         event_payload={

@@ -11,6 +11,11 @@ from app.models.service_dispatch_event_v2 import ServiceDispatchEventV2
 from app.models.service_intake_v2 import ServiceIntakeV2
 from app.schemas.v2.frap_pediatrics import FrapPediatricsV2Out, FrapPediatricsV2Upsert
 from app.services.license_guard import require_company_feature
+from app.services.retrospective_guard import (
+    require_retrospective_timestamp,
+    require_retrospective_write_access,
+    validate_semantic_timestamp,
+)
 
 router = APIRouter(prefix="/v2/frap-pediatrics", tags=["v2-frap-pediatrics"])
 
@@ -138,6 +143,8 @@ def upsert_frap_pediatrics(
     if not intake:
         raise HTTPException(status_code=404, detail="Intake not found")
 
+    require_retrospective_write_access(intake, user)
+
     row = (
         db.query(FrapPediatricsV2)
         .filter(
@@ -147,8 +154,28 @@ def upsert_frap_pediatrics(
         .first()
     )
 
+    assessed_at_was_sent = "assessed_at" in payload.model_fields_set
+
+    if assessed_at_was_sent:
+        assessed_at = validate_semantic_timestamp(
+            intake=intake,
+            user=user,
+            value=payload.assessed_at,
+            field_name="assessed_at",
+        )
+    else:
+        assessed_at = row.assessed_at if row is not None else None
+
+    if row is None or assessed_at_was_sent:
+        require_retrospective_timestamp(
+            intake=intake,
+            value=assessed_at,
+            field_name="assessed_at",
+        )
+
     data = payload.model_dump(exclude_unset=True)
     data.pop("intake_id", None)
+    data["assessed_at"] = assessed_at
 
     if not row:
         row = FrapPediatricsV2(
@@ -172,6 +199,7 @@ def upsert_frap_pediatrics(
         service_id=getattr(intake, "service_id", None),
         unit_id=getattr(intake, "unit_id", None),
         event_type="clinical.pediatrics_updated",
+        occurred_at=row.assessed_at,
         status_label="Evaluación pediátrica actualizada",
         notes="Pediatrics V2 guardado/actualizado",
         event_payload={

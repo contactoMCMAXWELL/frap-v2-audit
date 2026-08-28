@@ -18,12 +18,13 @@ class ServiceDispatchEventV2Base(BaseModel):
 
 
 class ServiceDispatchEventV2Create(ServiceDispatchEventV2Base):
-    pass
+    occurred_at: Optional[datetime] = None
 
 
 class ServiceDispatchEventV2Out(ServiceDispatchEventV2Base):
     id: UUID
     company_id: UUID
+    occurred_at: Optional[datetime] = None
     created_at: datetime
 
     class Config:

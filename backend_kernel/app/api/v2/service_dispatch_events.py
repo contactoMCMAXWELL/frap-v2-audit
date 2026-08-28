@@ -15,6 +15,11 @@ from app.schemas.v2.service_dispatch_event import (
     ServiceDispatchEventV2Create,
     ServiceDispatchEventV2Out,
 )
+from app.services.retrospective_guard import (
+    require_retrospective_timestamp,
+    require_retrospective_write_access,
+    validate_semantic_timestamp,
+)
 
 router = APIRouter(prefix="/v2/service-dispatch-events", tags=["v2-service-dispatch-events"])
 
@@ -68,6 +73,21 @@ def create_dispatch_event(
     if not intake:
         raise HTTPException(status_code=404, detail="Intake not found")
 
+    require_retrospective_write_access(intake, user)
+
+    occurred_at = validate_semantic_timestamp(
+        intake=intake,
+        user=user,
+        value=payload.occurred_at,
+        field_name="occurred_at",
+    )
+
+    require_retrospective_timestamp(
+        intake=intake,
+        value=occurred_at,
+        field_name="occurred_at",
+    )
+
     if payload.service_id:
         svc = (
             db.query(Service)
@@ -104,6 +124,7 @@ def create_dispatch_event(
         status_label=status_label,
         notes=(payload.notes or "").strip(),
         event_payload=payload.event_payload or {},
+        occurred_at=occurred_at,
     )
     db.add(row)
     db.commit()

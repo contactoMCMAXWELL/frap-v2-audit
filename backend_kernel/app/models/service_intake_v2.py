@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -54,6 +55,32 @@ class ServiceIntakeV2(Base):
     extra_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    # Captura temporal / retrospectiva
+    capture_mode: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="realtime",
+        server_default="realtime",
+    )
+    occurred_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    retrospective_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    retrospective_started_by_user_id = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    retrospective_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    approved_by_user_id = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    approved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at = created_at_col()
     updated_at = updated_at_col()

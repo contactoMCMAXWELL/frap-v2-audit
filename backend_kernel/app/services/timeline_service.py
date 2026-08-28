@@ -12,6 +12,7 @@ def create_dispatch_event(
     event_type: str,
     status_label: str,
     payload: dict | None = None,
+    occurred_at=None,
 ):
     """
     Registra un evento en el timeline operativo/clínico del servicio.
@@ -23,6 +24,7 @@ def create_dispatch_event(
         event_type=event_type,
         status_label=status_label,
         event_payload=payload or {},
+        occurred_at=occurred_at,
     )
 
     db.add(event)
