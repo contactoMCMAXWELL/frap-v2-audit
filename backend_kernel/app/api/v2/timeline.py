@@ -33,6 +33,7 @@ CATEGORY_LABELS = {
 }
 
 OPERATIONAL_EVENT_LABELS = {
+    "service_created": "Servicio creado",
     "unit_assigned": "Unidad asignada",
     "unit_reassigned": "Unidad reasignada",
     "unit_en_route": "Unidad en ruta",
@@ -832,8 +833,8 @@ def get_intake_timeline(
         subtitle = _compact_join(
             [
                 _humanize_text(getattr(row, "dose", None)),
-                _humanize_text(getattr(row, "route", None))
-                or _humanize_text(getattr(catalog, "route", None)),
+                _safe_text(getattr(row, "route", None))
+                or _safe_text(getattr(catalog, "route", None)),
             ]
         )
         details = _build_details(
