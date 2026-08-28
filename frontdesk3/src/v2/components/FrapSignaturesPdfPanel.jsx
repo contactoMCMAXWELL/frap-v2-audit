@@ -3,6 +3,26 @@ import FrapWhatsappShareModal from "./FrapWhatsappShareModal";
 
 const API_BASE = "/api/v2";
 
+function localInputToIso(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+function isoToLocalInput(value) {
+  if (!value) return "";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const pad = (n) => String(n).padStart(2, "0");
+
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+    date.getDate()
+  )}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 const SIGNATURE_ROLE_META = {
   operator: {
     title: "Paramédico / Admin",
@@ -243,6 +263,7 @@ function SignatureCard({
   roleKey,
   existingSignature,
   onSaved,
+  isRetrospective,
 }) {
   const meta = SIGNATURE_ROLE_META[roleKey];
 
@@ -260,6 +281,9 @@ function SignatureCard({
     existingSignature?.refusal_reason || ""
   );
   const [signatureImage, setSignatureImage] = useState(existingSignature?.image_base64 || "");
+  const [signatureDeclaredAt, setSignatureDeclaredAt] = useState(
+    isoToLocalInput(existingSignature?.signed_at)
+  );
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -272,12 +296,29 @@ function SignatureCard({
     setRefusedToSign(Boolean(existingSignature?.refused_to_sign));
     setRefusalReason(existingSignature?.refusal_reason || "");
     setSignatureImage(existingSignature?.image_base64 || "");
+    setSignatureDeclaredAt(isoToLocalInput(existingSignature?.signed_at));
   }, [existingSignature, meta.defaultRoleLabel, roleKey]);
 
   const saveSignature = async () => {
     try {
       setSaving(true);
       setMessage("");
+
+      let signedAtIso = null;
+
+      if (isRetrospective) {
+        if (!signatureDeclaredAt) {
+          setMessage("Error: indica la fecha y hora declarada de la firma.");
+          return;
+        }
+
+        signedAtIso = localInputToIso(signatureDeclaredAt);
+
+        if (!signedAtIso) {
+          setMessage("Error: la fecha y hora declarada de la firma no son válidas.");
+          return;
+        }
+      }
 
       const payload = {
         intake_id: intakeId,
@@ -289,6 +330,7 @@ function SignatureCard({
         refused_to_sign: roleKey === "patient" ? refusedToSign : false,
         refusal_reason: roleKey === "patient" && refusedToSign ? refusalReason : "",
         meta_json: {},
+        ...(isRetrospective ? { signed_at: signedAtIso } : {}),
       };
 
       await apiPut("/frap-signatures/", session, payload);
@@ -357,6 +399,24 @@ function SignatureCard({
           </label>
         )}
 
+        {isRetrospective && (
+          <label>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>
+              Fecha y hora de firma
+            </div>
+            <input
+              type="datetime-local"
+              value={signatureDeclaredAt}
+              onChange={(e) => setSignatureDeclaredAt(e.target.value)}
+              style={inputStyle}
+              required
+            />
+            <div style={{ color: "#92400e", fontSize: 13, marginTop: 4 }}>
+              Obligatoria en captura retrospectiva.
+            </div>
+          </label>
+        )}
+
         {roleKey === "patient" && (
           <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <input
@@ -413,7 +473,7 @@ function SignatureCard({
   );
 }
 
-export default function FrapSignaturesPdfPanel({ session, intakeId }) {
+export default function FrapSignaturesPdfPanel({ session, intakeId, intake }) {
   const [signatures, setSignatures] = useState([]);
   const [validation, setValidation] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -623,6 +683,7 @@ export default function FrapSignaturesPdfPanel({ session, intakeId }) {
         <SignatureCard
           session={session}
           intakeId={intakeId}
+          isRetrospective={intake?.capture_mode === "retrospective"}
           roleKey="operator"
           existingSignature={signaturesByRole.operator}
           onSaved={refreshAll}
@@ -631,6 +692,7 @@ export default function FrapSignaturesPdfPanel({ session, intakeId }) {
         <SignatureCard
           session={session}
           intakeId={intakeId}
+          isRetrospective={intake?.capture_mode === "retrospective"}
           roleKey="receiver"
           existingSignature={signaturesByRole.receiver}
           onSaved={refreshAll}
@@ -639,6 +701,7 @@ export default function FrapSignaturesPdfPanel({ session, intakeId }) {
         <SignatureCard
           session={session}
           intakeId={intakeId}
+          isRetrospective={intake?.capture_mode === "retrospective"}
           roleKey="patient"
           existingSignature={signaturesByRole.patient}
           onSaved={refreshAll}

@@ -2,7 +2,7 @@ import React from "react";
 import { useParams } from "react-router-dom";
 import FrapSignaturesPdfPanel from "./FrapSignaturesPdfPanel";
 
-export default function FrapPdfSectionV2({ session }) {
+export default function FrapPdfSectionV2({ session, intake }) {
   const { intakeId } = useParams();
 
   if (!intakeId) {
@@ -21,5 +21,11 @@ export default function FrapPdfSectionV2({ session }) {
     );
   }
 
-  return <FrapSignaturesPdfPanel session={session} intakeId={intakeId} />;
+  return (
+    <FrapSignaturesPdfPanel
+      session={session}
+      intakeId={intakeId}
+      intake={intake}
+    />
+  );
 }
