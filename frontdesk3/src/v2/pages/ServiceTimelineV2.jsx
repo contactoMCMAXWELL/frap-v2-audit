@@ -263,11 +263,49 @@ export default function ServiceTimelineV2({ session }) {
   }
 
   function scrollToSection(sectionId) {
-    const node = document.getElementById(sectionId);
-    if (!node) return;
-    node.scrollIntoView({ behavior: "smooth", block: "start" });
-    node.classList.add("v2-section-focus");
-    window.setTimeout(() => node.classList.remove("v2-section-focus"), 1400);
+    const sectionParentMap = {
+      "detalle-servicio": "detalle-servicio",
+      "mapa-incidente": "mapa-incidente",
+      "despacho-operativo": "despacho-operativo",
+      "timeline-servicio": "timeline-servicio",
+      "insumos-servicio": "insumos-servicio",
+      "costos-servicio": "insumos-servicio",
+      "frap-clinico": "frap-clinico",
+      "evaluacion-clinica": "frap-clinico",
+      "pediatria": "frap-clinico",
+      "cardio": "frap-clinico",
+      "embarazo": "frap-clinico",
+      "signos-vitales": "signos-vitales",
+      "procedimientos": "signos-vitales",
+      "medicamentos": "signos-vitales",
+      "lesiones-corporales": "signos-vitales",
+      "negativa-atencion": "negativa-atencion",
+      "traslado-entrega": "negativa-atencion",
+      "firmas-pdf": "negativa-atencion",
+    };
+
+    const parentId = sectionParentMap[sectionId] || sectionId;
+
+    setSectionState((prev) => ({
+      ...prev,
+      [parentId]: true,
+    }));
+
+    window.setTimeout(() => {
+      const node = document.getElementById(sectionId);
+      if (!node) return;
+
+      node.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+
+      node.classList.add("v2-section-focus");
+      window.setTimeout(
+        () => node.classList.remove("v2-section-focus"),
+        1400
+      );
+    }, 60);
   }
 
   async function createDispatchEvent(event_type, status_label, opts = {}) {

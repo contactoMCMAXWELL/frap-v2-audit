@@ -27,7 +27,7 @@ export default function ServiceSectionLauncherV2({
           <div style={{ display: 'grid', gap: 6 }}>
             <h3 style={{ margin: 0 }}>Acceso rápido por bloques</h3>
             <div style={{ color: '#6b7280', fontSize: 14 }}>
-              Selecciona el bloque que necesitas sin recorrer toda la pantalla.
+              Navega por etapa del servicio. Puedes abrir cualquier bloque sin perder la información ya capturada.
             </div>
           </div>
 
@@ -59,10 +59,11 @@ export default function ServiceSectionLauncherV2({
                     onClick={() => onNavigate?.(section.id)}
                     style={cardButtonStyle}
                   >
-                    <div style={{ display: 'grid', gap: 6, textAlign: 'left' }}>
+                    <div style={{ display: 'grid', gap: 4, textAlign: 'left', minWidth: 0 }}>
                       <div style={cardTitleStyle}>{section.label}</div>
                       <div style={cardDescStyle}>{section.description}</div>
                     </div>
+
                     <span style={ctaStyle}>Abrir bloque</span>
                   </button>
                 ))}
@@ -87,20 +88,22 @@ const wrapperStyle = {
   background: '#fff',
   border: '1px solid #e5e7eb',
   borderRadius: 12,
-  padding: 18,
+  padding: 16,
   display: 'grid',
-  gap: 18,
+  gap: 14,
 };
 
 const groupTitleStyle = {
-  fontSize: 15,
+  fontSize: 14,
   fontWeight: 800,
   color: '#111827',
+  textTransform: 'uppercase',
+  letterSpacing: '0.02em',
 };
 
 const groupDescStyle = {
-  marginTop: 4,
-  fontSize: 13,
+  marginTop: 2,
+  fontSize: 12,
   color: '#6b7280',
 };
 
@@ -111,38 +114,38 @@ const helperRowStyle = {
 
 const cardsGridStyle = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-  gap: 12,
+  gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+  gap: 8,
 };
 
 const cardButtonStyle = {
   background: '#f9fafb',
   border: '1px solid #e5e7eb',
-  borderRadius: 12,
-  padding: 14,
+  borderRadius: 10,
+  padding: '10px 12px',
   cursor: 'pointer',
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'flex-start',
-  gap: 12,
-  minHeight: 112,
+  gap: 10,
+  minHeight: 78,
 };
 
 const cardTitleStyle = {
-  fontSize: 14,
+  fontSize: 13,
   fontWeight: 800,
   color: '#111827',
 };
 
 const cardDescStyle = {
-  fontSize: 13,
-  lineHeight: 1.45,
+  fontSize: 12,
+  lineHeight: 1.35,
   color: '#4b5563',
 };
 
 const ctaStyle = {
   whiteSpace: 'nowrap',
-  fontSize: 12,
+  fontSize: 11,
   fontWeight: 700,
   color: '#1d4ed8',
 };
