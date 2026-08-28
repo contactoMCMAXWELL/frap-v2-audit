@@ -97,14 +97,73 @@ function detailItemsOf(evt) {
   return [];
 }
 
+const SECTION_PALETTE = {
+  "detalle-servicio": {
+    bg: "#eff6ff",
+    border: "#bfdbfe",
+    accent: "#2563eb",
+  },
+  "mapa-incidente": {
+    bg: "#eff6ff",
+    border: "#bfdbfe",
+    accent: "#2563eb",
+  },
+  "despacho-operativo": {
+    bg: "#eff6ff",
+    border: "#bfdbfe",
+    accent: "#2563eb",
+  },
+  "timeline-servicio": {
+    bg: "#eff6ff",
+    border: "#bfdbfe",
+    accent: "#2563eb",
+  },
+
+  "insumos-servicio": {
+    bg: "#f8fafc",
+    border: "#cbd5e1",
+    accent: "#475569",
+  },
+
+  "frap-clinico": {
+    bg: "#ecfdf5",
+    border: "#a7f3d0",
+    accent: "#047857",
+  },
+
+  "signos-vitales": {
+    bg: "#ecfdf5",
+    border: "#a7f3d0",
+    accent: "#047857",
+  },
+
+  "negativa-atencion": {
+    bg: "#fffbeb",
+    border: "#fde68a",
+    accent: "#b45309",
+  },
+};
+
 function SectionShell({ id, title, description, children, expanded = true, onToggle }) {
+  const palette = SECTION_PALETTE[id] || {
+    bg: "#ffffff",
+    border: "#e5e7eb",
+    accent: "#64748b",
+  };
+
   const detailsStyle = expanded
-    ? collapsibleStyle
+    ? {
+        ...collapsibleStyle,
+        background: palette.bg,
+        borderColor: palette.border,
+        borderLeft: `5px solid ${palette.accent}`,
+      }
     : {
         ...collapsibleStyle,
         padding: "9px 12px",
-        background: "#fafafa",
-        borderColor: "#e5e7eb",
+        background: palette.bg,
+        borderColor: palette.border,
+        borderLeft: `5px solid ${palette.accent}`,
       };
 
   return (
@@ -125,6 +184,7 @@ function SectionShell({ id, title, description, children, expanded = true, onTog
               style={{
                 margin: 0,
                 fontSize: expanded ? undefined : 14,
+                color: palette.accent,
               }}
             >
               {title}

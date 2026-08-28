@@ -2,6 +2,34 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { hasSectionCapability } from '../config/serviceSections';
 
+const GROUP_PALETTE = {
+  operacion: {
+    bg: '#eff6ff',
+    border: '#bfdbfe',
+    accent: '#2563eb',
+  },
+  recursos: {
+    bg: '#f8fafc',
+    border: '#cbd5e1',
+    accent: '#475569',
+  },
+  clinica: {
+    bg: '#ecfdf5',
+    border: '#a7f3d0',
+    accent: '#047857',
+  },
+  especialidades: {
+    bg: '#f5f3ff',
+    border: '#ddd6fe',
+    accent: '#7c3aed',
+  },
+  cierre: {
+    bg: '#fffbeb',
+    border: '#fde68a',
+    accent: '#b45309',
+  },
+};
+
 export default function ServiceSectionLauncherV2({
   caps,
   groups = [],
@@ -44,32 +72,51 @@ export default function ServiceSectionLauncherV2({
         </div>
 
         <div style={{ display: 'grid', gap: 16 }}>
-          {visibleGroups.map((group) => (
-            <div key={group.key} style={{ display: 'grid', gap: 10 }}>
-              <div>
-                <div style={groupTitleStyle}>{group.title}</div>
-                {!!group.description && <div style={groupDescStyle}>{group.description}</div>}
-              </div>
+          {visibleGroups.map((group) => {
+            const palette = GROUP_PALETTE[group.key] || GROUP_PALETTE.recursos;
 
-              <div style={cardsGridStyle}>
-                {group.sections.map((section) => (
-                  <button
-                    key={section.id}
-                    type="button"
-                    onClick={() => onNavigate?.(section.id)}
-                    style={cardButtonStyle}
-                  >
-                    <div style={{ display: 'grid', gap: 4, textAlign: 'left', minWidth: 0 }}>
-                      <div style={cardTitleStyle}>{section.label}</div>
-                      <div style={cardDescStyle}>{section.description}</div>
-                    </div>
+            return (
+              <div
+                key={group.key}
+                style={{
+                  display: 'grid',
+                  gap: 10,
+                  padding: 12,
+                  borderRadius: 12,
+                  border: `1px solid ${palette.border}`,
+                  borderLeft: `5px solid ${palette.accent}`,
+                  background: palette.bg,
+                }}
+              >
+                <div>
+                  <div style={{ ...groupTitleStyle, color: palette.accent }}>
+                    {group.title}
+                  </div>
+                  {!!group.description && (
+                    <div style={groupDescStyle}>{group.description}</div>
+                  )}
+                </div>
 
-                    <span style={ctaStyle}>Abrir bloque</span>
-                  </button>
-                ))}
+                <div style={cardsGridStyle}>
+                  {group.sections.map((section) => (
+                    <button
+                      key={section.id}
+                      type="button"
+                      onClick={() => onNavigate?.(section.id)}
+                      style={cardButtonStyle}
+                    >
+                      <div style={{ display: 'grid', gap: 4, textAlign: 'left', minWidth: 0 }}>
+                        <div style={cardTitleStyle}>{section.label}</div>
+                        <div style={cardDescStyle}>{section.description}</div>
+                      </div>
+
+                      <span style={ctaStyle}>Abrir bloque</span>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -119,8 +166,8 @@ const cardsGridStyle = {
 };
 
 const cardButtonStyle = {
-  background: '#f9fafb',
-  border: '1px solid #e5e7eb',
+  background: 'rgba(255,255,255,0.88)',
+  border: '1px solid rgba(148,163,184,0.32)',
   borderRadius: 10,
   padding: '10px 12px',
   cursor: 'pointer',
