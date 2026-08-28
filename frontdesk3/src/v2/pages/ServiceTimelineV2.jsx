@@ -99,46 +99,46 @@ function detailItemsOf(evt) {
 
 const SECTION_PALETTE = {
   "detalle-servicio": {
-    bg: "#eff6ff",
+    bg: "#f7fbff",
     border: "#bfdbfe",
     accent: "#2563eb",
   },
   "mapa-incidente": {
-    bg: "#eff6ff",
+    bg: "#f7fbff",
     border: "#bfdbfe",
     accent: "#2563eb",
   },
   "despacho-operativo": {
-    bg: "#eff6ff",
+    bg: "#f7fbff",
     border: "#bfdbfe",
     accent: "#2563eb",
   },
   "timeline-servicio": {
-    bg: "#eff6ff",
+    bg: "#f7fbff",
     border: "#bfdbfe",
     accent: "#2563eb",
   },
 
   "insumos-servicio": {
-    bg: "#f8fafc",
+    bg: "#fbfcfd",
     border: "#cbd5e1",
     accent: "#475569",
   },
 
   "frap-clinico": {
-    bg: "#ecfdf5",
+    bg: "#f5fdf9",
     border: "#a7f3d0",
     accent: "#047857",
   },
 
   "signos-vitales": {
-    bg: "#ecfdf5",
-    border: "#a7f3d0",
-    accent: "#047857",
+    bg: "#faf9ff",
+    border: "#ddd6fe",
+    accent: "#7c3aed",
   },
 
   "negativa-atencion": {
-    bg: "#fffbeb",
+    bg: "#fffdf6",
     border: "#fde68a",
     accent: "#b45309",
   },

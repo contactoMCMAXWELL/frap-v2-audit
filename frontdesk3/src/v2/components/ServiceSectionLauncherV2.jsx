@@ -4,27 +4,27 @@ import { hasSectionCapability } from '../config/serviceSections';
 
 const GROUP_PALETTE = {
   operacion: {
-    bg: '#eff6ff',
+    bg: '#f7fbff',
     border: '#bfdbfe',
     accent: '#2563eb',
   },
   recursos: {
-    bg: '#f8fafc',
+    bg: '#fbfcfd',
     border: '#cbd5e1',
     accent: '#475569',
   },
   clinica: {
-    bg: '#ecfdf5',
+    bg: '#f5fdf9',
     border: '#a7f3d0',
     accent: '#047857',
   },
   especialidades: {
-    bg: '#f5f3ff',
+    bg: '#faf9ff',
     border: '#ddd6fe',
     accent: '#7c3aed',
   },
   cierre: {
-    bg: '#fffbeb',
+    bg: '#fffdf6',
     border: '#fde68a',
     accent: '#b45309',
   },
