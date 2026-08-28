@@ -98,17 +98,65 @@ function detailItemsOf(evt) {
 }
 
 function SectionShell({ id, title, description, children, expanded = true, onToggle }) {
+  const detailsStyle = expanded
+    ? collapsibleStyle
+    : {
+        ...collapsibleStyle,
+        padding: "9px 12px",
+        background: "#fafafa",
+        borderColor: "#e5e7eb",
+      };
+
   return (
     <section id={id} style={groupSectionStyle}>
-      <details open={expanded} style={collapsibleStyle} onToggle={(e) => onToggle?.(e.currentTarget.open)}>
-        <summary style={summaryToggleStyle}>
-          <div style={{ display: "grid", gap: 4 }}>
-            <h3 style={{ margin: 0 }}>{title}</h3>
-            {!!description && <div style={{ color: "#6b7280", fontSize: 14 }}>{description}</div>}
+      <details
+        open={expanded}
+        style={detailsStyle}
+        onToggle={(e) => onToggle?.(e.currentTarget.open)}
+      >
+        <summary
+          style={{
+            ...summaryToggleStyle,
+            minHeight: expanded ? undefined : 30,
+          }}
+        >
+          <div style={{ display: "grid", gap: expanded ? 4 : 1 }}>
+            <h3
+              style={{
+                margin: 0,
+                fontSize: expanded ? undefined : 14,
+              }}
+            >
+              {title}
+            </h3>
+
+            {!!description && (
+              <div
+                style={{
+                  color: "#6b7280",
+                  fontSize: expanded ? 14 : 11,
+                  lineHeight: expanded ? 1.4 : 1.25,
+                }}
+              >
+                {description}
+              </div>
+            )}
           </div>
-          <span style={summaryPillStyle}>{expanded ? "Ocultar" : "Mostrar"}</span>
+
+          <span
+            style={{
+              ...summaryPillStyle,
+              padding: expanded ? "6px 12px" : "4px 9px",
+              fontSize: expanded ? 12 : 11,
+            }}
+          >
+            {expanded ? "Ocultar" : "Mostrar"}
+          </span>
         </summary>
-        <div style={{ display: "grid", gap: 14, marginTop: 14 }}>{children}</div>
+
+        <div style={{ display: "grid", gap: 14, marginTop: 14 }}>
+          {children}
+        </div>
       </details>
     </section>
   );
