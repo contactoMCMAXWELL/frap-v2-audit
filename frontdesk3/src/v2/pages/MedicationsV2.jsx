@@ -2,8 +2,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { v2Api } from "../api/v2";
 import { v2AdminApi } from "../api/admin";
+import { localInputToIso } from "../../utils/datetime";
 
 const initialForm = {
+  administered_at: "",
   medication_name: "",
   dose: "",
   route: "",
@@ -11,7 +13,12 @@ const initialForm = {
   notes: "",
 };
 
-export default function MedicationsV2({ session, onDataChanged }) {
+export default function MedicationsV2({
+  session,
+  onDataChanged,
+  readOnly = false,
+  isRetrospective = false,
+}) {
   const { intakeId } = useParams();
 
   const [items, setItems] = useState([]);
@@ -81,9 +88,24 @@ export default function MedicationsV2({ session, onDataChanged }) {
 
   const onSubmit = async (e) => {
     e.preventDefault();
+    if (readOnly || !intakeId) return;
 
     if (!form.medication_name.trim()) {
       setError("Captura o selecciona el medicamento.");
+      return;
+    }
+
+    if (isRetrospective && !form.administered_at) {
+      setError("Captura la fecha y hora declarada de la administración.");
+      return;
+    }
+
+    const administeredAtIso = isRetrospective
+      ? localInputToIso(form.administered_at)
+      : null;
+
+    if (isRetrospective && !administeredAtIso) {
+      setError("La fecha y hora declarada de la administración no es válida.");
       return;
     }
 
@@ -94,6 +116,7 @@ export default function MedicationsV2({ session, onDataChanged }) {
       await v2Api.frapMedicationCreate({
         payload: {
           intake_id: intakeId,
+          ...(isRetrospective ? { administered_at: administeredAtIso } : {}),
           medication_name: form.medication_name,
           dose: form.dose,
           route: form.route,
@@ -123,6 +146,22 @@ export default function MedicationsV2({ session, onDataChanged }) {
       <h3 style={{ marginTop: 0 }}>Medicamentos administrados</h3>
 
       <form onSubmit={onSubmit} style={{ display: "grid", gap: 12, marginBottom: 18 }}>
+        <fieldset
+          disabled={readOnly}
+          style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: "grid", gap: 12 }}
+        >
+          {isRetrospective ? (
+            <div style={fieldStyle}>
+              <div style={labelText}>Fecha y hora declarada de administración</div>
+              <input
+                style={controlStyle}
+                type="datetime-local"
+                value={form.administered_at}
+                onChange={(e) => onChange("administered_at", e.target.value)}
+              />
+            </div>
+          ) : null}
+
         <div style={fieldStyle}>
           <div style={labelText}>Medicamento del catálogo</div>
           <select
@@ -211,6 +250,7 @@ export default function MedicationsV2({ session, onDataChanged }) {
             {saving ? "Guardando..." : "Agregar medicamento"}
           </button>
         </div>
+        </fieldset>
       </form>
 
       {error && <p style={{ color: "crimson" }}>{error}</p>}

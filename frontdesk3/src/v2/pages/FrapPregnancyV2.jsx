@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { v2Api } from "../api/v2";
+import { localInputToIso, toDatetimeLocalValue } from "../../utils/datetime";
 
 const initialForm = {
+  assessed_at: "",
   pregnancy_confirmed: false,
   gestational_weeks: "",
   gravida: "",
@@ -108,6 +110,7 @@ export default function FrapPregnancyV2({
   session,
   intakeId: intakeIdProp,
   readOnly = false,
+  isRetrospective = false,
   onDataChanged,
 }) {
   const { intakeId: intakeIdFromParams } = useParams();
@@ -143,6 +146,7 @@ export default function FrapPregnancyV2({
       }
 
       setForm({
+        assessed_at: toDatetimeLocalValue(data.assessed_at),
         pregnancy_confirmed: !!data.pregnancy_confirmed,
         gestational_weeks: data.gestational_weeks || "",
         gravida: data.gravida || "",
@@ -231,6 +235,20 @@ export default function FrapPregnancyV2({
     if (e) e.preventDefault();
     if (readOnly || !intakeId) return;
 
+    if (isRetrospective && !form.assessed_at) {
+      setError("Captura la fecha y hora declarada de la evaluación obstétrica.");
+      return;
+    }
+
+    const assessedAtIso = isRetrospective
+      ? localInputToIso(form.assessed_at)
+      : null;
+
+    if (isRetrospective && !assessedAtIso) {
+      setError("La fecha y hora declarada de la evaluación obstétrica no es válida.");
+      return;
+    }
+
     try {
       setSaving(true);
       setError("");
@@ -239,7 +257,10 @@ export default function FrapPregnancyV2({
       await v2Api.frapPregnancyUpsert({
         payload: {
           intake_id: intakeId,
-          ...form,
+          ...(isRetrospective ? { assessed_at: assessedAtIso } : {}),
+          ...Object.fromEntries(
+            Object.entries(form).filter(([key]) => key !== "assessed_at")
+          ),
         },
         token: session?.token,
         companyId: session?.companyId,
@@ -275,6 +296,20 @@ export default function FrapPregnancyV2({
       {message ? <div style={{ ...helpStyle, color: "#047857" }}>{message}</div> : null}
 
       <form onSubmit={save} style={{ display: "grid", gap: 12 }}>
+        {isRetrospective ? (
+          <Section title="Momento de la evaluación">
+            <Field label="Fecha y hora declarada de la evaluación">
+              <input
+                style={controlStyle}
+                type="datetime-local"
+                value={form.assessed_at}
+                onChange={(e) => updateField("assessed_at", e.target.value)}
+                disabled={readOnly}
+              />
+            </Field>
+          </Section>
+        ) : null}
+
         <Section title="Identificación obstétrica">
           <div style={grid3}>
             <FieldCheckbox

@@ -2,8 +2,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { v2Api } from "../api/v2";
 import { v2AdminApi } from "../api/admin";
+import { localInputToIso } from "../../utils/datetime";
 
 const initialForm = {
+  performed_at: "",
   procedure_name: "",
   status: "performed",
   body_site: "",
@@ -11,7 +13,12 @@ const initialForm = {
   notes: "",
 };
 
-export default function ProceduresV2({ session, onDataChanged }) {
+export default function ProceduresV2({
+  session,
+  onDataChanged,
+  readOnly = false,
+  isRetrospective = false,
+}) {
   const { intakeId } = useParams();
   const [items, setItems] = useState([]);
   const [catalog, setCatalog] = useState([]);
@@ -74,9 +81,24 @@ export default function ProceduresV2({ session, onDataChanged }) {
 
   const onSubmit = async (e) => {
     e.preventDefault();
+    if (readOnly || !intakeId) return;
 
     if (!form.procedure_name.trim()) {
       setError("Captura o selecciona el procedimiento.");
+      return;
+    }
+
+    if (isRetrospective && !form.performed_at) {
+      setError("Captura la fecha y hora declarada del procedimiento.");
+      return;
+    }
+
+    const performedAtIso = isRetrospective
+      ? localInputToIso(form.performed_at)
+      : null;
+
+    if (isRetrospective && !performedAtIso) {
+      setError("La fecha y hora declarada del procedimiento no es válida.");
       return;
     }
 
@@ -87,6 +109,7 @@ export default function ProceduresV2({ session, onDataChanged }) {
       await v2Api.frapProcedureCreate({
         payload: {
           intake_id: intakeId,
+          ...(isRetrospective ? { performed_at: performedAtIso } : {}),
           procedure_name: form.procedure_name,
           status: form.status,
           body_site: form.body_site,
@@ -116,6 +139,22 @@ export default function ProceduresV2({ session, onDataChanged }) {
       <h3 style={{ marginTop: 0 }}>Procedimientos realizados</h3>
 
       <form onSubmit={onSubmit} style={{ display: "grid", gap: 12, marginBottom: 18 }}>
+        <fieldset
+          disabled={readOnly}
+          style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: "grid", gap: 12 }}
+        >
+          {isRetrospective ? (
+            <div style={fieldStyle}>
+              <div style={labelText}>Fecha y hora declarada del procedimiento</div>
+              <input
+                style={controlStyle}
+                type="datetime-local"
+                value={form.performed_at}
+                onChange={(e) => onChange("performed_at", e.target.value)}
+              />
+            </div>
+          ) : null}
+
         <div style={fieldStyle}>
           <div style={labelText}>Procedimiento del catálogo</div>
           <select
@@ -205,6 +244,7 @@ export default function ProceduresV2({ session, onDataChanged }) {
             {saving ? "Guardando..." : "Agregar procedimiento"}
           </button>
         </div>
+        </fieldset>
       </form>
 
       {error && <p style={{ color: "crimson" }}>{error}</p>}

@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { v2Api } from "../api/v2";
+import { localInputToIso, toDatetimeLocalValue } from "../../utils/datetime";
 
 const initialForm = {
+  assessed_at: "",
   age_group: "",
   estimated_age_value: "",
   estimated_age_unit: "",
@@ -116,6 +118,7 @@ export default function FrapPediatricsV2({
   session,
   intakeId: intakeIdProp,
   readOnly = false,
+  isRetrospective = false,
   onDataChanged,
 }) {
   const { intakeId: intakeIdFromParams } = useParams();
@@ -151,6 +154,7 @@ export default function FrapPediatricsV2({
       }
 
       setForm({
+        assessed_at: toDatetimeLocalValue(data.assessed_at),
         age_group: data.age_group || "",
         estimated_age_value: data.estimated_age_value || "",
         estimated_age_unit: data.estimated_age_unit || "",
@@ -204,6 +208,20 @@ export default function FrapPediatricsV2({
     if (e) e.preventDefault();
     if (readOnly || !intakeId) return;
 
+    if (isRetrospective && !form.assessed_at) {
+      setError("Captura la fecha y hora declarada de la evaluación pediátrica.");
+      return;
+    }
+
+    const assessedAtIso = isRetrospective
+      ? localInputToIso(form.assessed_at)
+      : null;
+
+    if (isRetrospective && !assessedAtIso) {
+      setError("La fecha y hora declarada de la evaluación pediátrica no es válida.");
+      return;
+    }
+
     try {
       setSaving(true);
       setError("");
@@ -212,7 +230,10 @@ export default function FrapPediatricsV2({
       await v2Api.frapPediatricsUpsert({
         payload: {
           intake_id: intakeId,
-          ...form,
+          ...(isRetrospective ? { assessed_at: assessedAtIso } : {}),
+          ...Object.fromEntries(
+            Object.entries(form).filter(([key]) => key !== "assessed_at")
+          ),
           caregiver_present: !!form.caregiver_present,
           suspected_abuse: !!form.suspected_abuse,
           active: !!form.active,
@@ -251,6 +272,18 @@ export default function FrapPediatricsV2({
       {message ? <div style={{ ...helpStyle, color: "#047857" }}>{message}</div> : null}
 
       <form onSubmit={save} style={{ display: "grid", gap: 12 }}>
+        {isRetrospective ? (
+          <Field label="Fecha y hora declarada de la evaluación">
+            <input
+              style={controlStyle}
+              type="datetime-local"
+              value={form.assessed_at}
+              onChange={(e) => updateField("assessed_at", e.target.value)}
+              disabled={readOnly}
+            />
+          </Field>
+        ) : null}
+
         <div style={grid3}>
           <Field label="Grupo etario">
             <select

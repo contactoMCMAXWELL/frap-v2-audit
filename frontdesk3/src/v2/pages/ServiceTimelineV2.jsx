@@ -21,7 +21,7 @@ import MedicationsV2 from "./MedicationsV2";
 import FrapTraumaV2 from "./FrapTraumaV2";
 import FrapRefusalV2 from "./FrapRefusalV2";
 import FrapHandoffV2 from "./FrapHandoffV2";
-import { formatDeviceDateTime } from "../../utils/datetime";
+import { formatDeviceDateTime, localInputToIso } from "../../utils/datetime";
 import { getRoleCapabilities } from "../permissions";
 
 async function apiJson(path, { method = "GET", token, companyId, userId, body } = {}) {
@@ -123,6 +123,7 @@ export default function ServiceTimelineV2({ session }) {
   const [units, setUnits] = useState([]);
   const [selectedUnitId, setSelectedUnitId] = useState("");
   const [dispatchNote, setDispatchNote] = useState("");
+  const [dispatchOccurredAt, setDispatchOccurredAt] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [dispatchBusy, setDispatchBusy] = useState(false);
@@ -138,6 +139,20 @@ export default function ServiceTimelineV2({ session }) {
   });
 
   const caps = useMemo(() => getRoleCapabilities(session?.role), [session?.role]);
+
+  const isRetrospective = intake?.capture_mode === "retrospective";
+  const normalizedRole = String(session?.role || "").trim().toUpperCase();
+  const canOperateRetrospective =
+    normalizedRole === "ADMIN" || normalizedRole === "SUPERADMIN";
+  const canOperateCurrentDispatch =
+    caps.dispatch.operate && (!isRetrospective || canOperateRetrospective);
+
+  const retrospectiveWriteBlocked =
+    isRetrospective && !canOperateRetrospective;
+
+  const retrospectiveApproved =
+    isRetrospective &&
+    Boolean(intake?.approved_at && intake?.approved_by_user_id);
 
   const pdfSession = useMemo(
     () => ({
@@ -256,7 +271,25 @@ export default function ServiceTimelineV2({ session }) {
   }
 
   async function createDispatchEvent(event_type, status_label, opts = {}) {
-    if (!caps.dispatch.operate) return;
+    if (!canOperateCurrentDispatch) return;
+
+    let occurredAtIso = null;
+
+    if (isRetrospective) {
+      if (!dispatchOccurredAt) {
+        setError(
+          "Indica la fecha y hora en que ocurrió este evento operativo."
+        );
+        return;
+      }
+
+      occurredAtIso = localInputToIso(dispatchOccurredAt);
+
+      if (!occurredAtIso) {
+        setError("La fecha y hora del evento operativo no son válidas.");
+        return;
+      }
+    }
 
     try {
       setDispatchBusy(true);
@@ -275,10 +308,12 @@ export default function ServiceTimelineV2({ session }) {
           status_label,
           notes: opts.notes || dispatchNote || "",
           event_payload: opts.event_payload || {},
+          ...(isRetrospective ? { occurred_at: occurredAtIso } : {}),
         },
       });
 
       setDispatchNote("");
+      if (isRetrospective) setDispatchOccurredAt("");
       if (opts.resetUnitSelection) setSelectedUnitId("");
       await load();
     } catch (e) {
@@ -289,7 +324,7 @@ export default function ServiceTimelineV2({ session }) {
   }
 
   async function assignUnit() {
-    if (!caps.dispatch.operate) return;
+    if (!canOperateCurrentDispatch) return;
 
     if (!selectedUnitId) {
       setError("Selecciona una unidad para asignarla.");
@@ -316,6 +351,48 @@ export default function ServiceTimelineV2({ session }) {
             Hub clínico-operativo con acceso rápido por bloques, timeline y cierre documental.
           </div>
         </div>
+
+        {isRetrospective && (
+          <div
+            style={{
+              border: "1px solid #f59e0b",
+              background: "#fffbeb",
+              color: "#78350f",
+              borderRadius: 12,
+              padding: 14,
+              display: "grid",
+              gap: 6,
+            }}
+          >
+            <div style={{ fontWeight: 800 }}>
+              Captura retrospectiva
+            </div>
+
+            <div>
+              <strong>Fecha y hora declarada del servicio:</strong>{" "}
+              {formatDeviceDateTime(intake?.occurred_at, {
+                fallback: "No especificada",
+              })}
+            </div>
+
+            {intake?.retrospective_reason ? (
+              <div>
+                <strong>Motivo:</strong> {intake.retrospective_reason}
+              </div>
+            ) : null}
+
+            <div>
+              <strong>Aprobación administrativa:</strong>{" "}
+              {retrospectiveApproved
+                ? `Aprobada${
+                    intake?.approved_at
+                      ? ` · ${formatDeviceDateTime(intake.approved_at)}`
+                      : ""
+                  }`
+                : "Pendiente"}
+            </div>
+          </div>
+        )}
 
         <div style={summaryStripStyle}>
           {quickFacts.map((item) => (
@@ -402,8 +479,25 @@ export default function ServiceTimelineV2({ session }) {
             <div style={{ display: "grid", gap: 12 }}>
               <div><strong>Unidad actual:</strong> {currentUnitCode || "Sin unidad asignada"}</div>
 
-              {caps.dispatch.operate ? (
+              {canOperateCurrentDispatch ? (
                 <>
+                  {isRetrospective && (
+                    <div style={fieldStyle}>
+                      <div style={labelText}>
+                        Fecha y hora del evento operativo
+                      </div>
+                      <input
+                        style={controlStyle}
+                        type="datetime-local"
+                        value={dispatchOccurredAt}
+                        onChange={(e) => setDispatchOccurredAt(e.target.value)}
+                      />
+                      <div style={{ color: "#92400e", fontSize: 13 }}>
+                        Obligatoria para cada evento registrado en una captura retrospectiva.
+                      </div>
+                    </div>
+                  )}
+
                   <div style={grid2}>
                     <div style={fieldStyle}>
                       <div style={labelText}>Seleccionar unidad</div>
@@ -456,7 +550,9 @@ export default function ServiceTimelineV2({ session }) {
                 </>
               ) : (
                 <div style={{ color: "#6b7280" }}>
-                  Este perfil tiene acceso de consulta al bloque operativo, sin permisos para modificar despacho.
+                  {isRetrospective && caps.dispatch.operate
+                    ? "La captura retrospectiva sólo puede ser modificada por ADMIN o SUPERADMIN."
+                    : "Este perfil tiene acceso de consulta al bloque operativo, sin permisos para modificar despacho."}
                 </div>
               )}
             </div>
@@ -559,7 +655,8 @@ export default function ServiceTimelineV2({ session }) {
             <FrapAssessmentV2
               session={session}
               intakeId={intakeId}
-              readOnly={!caps.clinical.edit}
+              readOnly={!caps.clinical.edit || retrospectiveWriteBlocked}
+              isRetrospective={isRetrospective}
             />
           </div>
 
@@ -567,7 +664,8 @@ export default function ServiceTimelineV2({ session }) {
             <FrapPediatricsV2
               session={session}
               intakeId={intakeId}
-              readOnly={!caps.clinical.edit}
+              readOnly={!caps.clinical.edit || retrospectiveWriteBlocked}
+              isRetrospective={isRetrospective}
               onDataChanged={load}
             />
           </div>
@@ -576,7 +674,8 @@ export default function ServiceTimelineV2({ session }) {
             <FrapCardioV2
               session={session}
               intakeId={intakeId}
-              readOnly={!caps.clinical.edit}
+              readOnly={!caps.clinical.edit || retrospectiveWriteBlocked}
+              isRetrospective={isRetrospective}
               onDataChanged={load}
             />
           </div>
@@ -585,7 +684,8 @@ export default function ServiceTimelineV2({ session }) {
             <FrapPregnancyV2
               session={session}
               intakeId={intakeId}
-              readOnly={!caps.clinical.edit}
+              readOnly={!caps.clinical.edit || retrospectiveWriteBlocked}
+              isRetrospective={isRetrospective}
               onDataChanged={load}
             />
           </div>
@@ -600,15 +700,29 @@ export default function ServiceTimelineV2({ session }) {
           title="Soporte clínico, procedimientos y lesiones"
           description="Acceso rápido a signos vitales, intervenciones, medicamentos y trauma."
         >
-          {caps.vitals.view && <VitalSignsV2 session={session} readOnly={!caps.vitals.edit} />}
+          {caps.vitals.view && (
+            <VitalSignsV2
+              session={session}
+              readOnly={!caps.vitals.edit || retrospectiveWriteBlocked}
+              isRetrospective={isRetrospective}
+            />
+          )}
           {caps.procedures.view && (
             <div id="procedimientos">
-              <ProceduresV2 session={session} readOnly={!caps.procedures.edit} />
+              <ProceduresV2
+                session={session}
+                readOnly={!caps.procedures.edit || retrospectiveWriteBlocked}
+                isRetrospective={isRetrospective}
+              />
             </div>
           )}
           {caps.medications.view && (
             <div id="medicamentos">
-              <MedicationsV2 session={session} readOnly={!caps.medications.edit} />
+              <MedicationsV2
+                session={session}
+                readOnly={!caps.medications.edit || retrospectiveWriteBlocked}
+                isRetrospective={isRetrospective}
+              />
             </div>
           )}
           {caps.trauma.view && (
@@ -616,9 +730,14 @@ export default function ServiceTimelineV2({ session }) {
               <FrapBodyMapV2
                 session={session}
                 intakeId={intakeId}
-                readOnly={!caps.trauma.edit}
+                readOnly={!caps.trauma.edit || retrospectiveWriteBlocked}
+                isRetrospective={isRetrospective}
               />
-              <FrapTraumaV2 session={session} readOnly={!caps.trauma.edit} />
+              <FrapTraumaV2
+                session={session}
+                readOnly={!caps.trauma.edit || retrospectiveWriteBlocked}
+                isRetrospective={isRetrospective}
+              />
             </div>
           )}
         </SectionShell>
@@ -632,12 +751,19 @@ export default function ServiceTimelineV2({ session }) {
           title="Cierre médico-legal"
           description="Bloques finales para negativa, entrega, firmas y PDF médico-legal."
         >
-          {caps.refusal.view && <FrapRefusalV2 session={session} readOnly={!caps.refusal.edit} />}
+          {caps.refusal.view && (
+            <FrapRefusalV2
+              session={session}
+              readOnly={!caps.refusal.edit || retrospectiveWriteBlocked}
+              isRetrospective={isRetrospective}
+            />
+          )}
           {caps.handoff.view && (
             <div id="traslado-entrega">
               <FrapHandoffV2
                 session={session}
-                readOnly={!caps.handoff.edit}
+                readOnly={!caps.handoff.edit || retrospectiveWriteBlocked}
+                isRetrospective={isRetrospective}
                 canSignReceiver={caps.handoff.signReceiver}
               />
             </div>

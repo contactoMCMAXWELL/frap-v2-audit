@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { v2Api } from "../api/v2";
+import { localInputToIso, toDatetimeLocalValue } from "../../utils/datetime";
 
 function formatUiError(err, fallback) {
   const msg = String(err?.message || "").trim();
@@ -9,6 +10,7 @@ function formatUiError(err, fallback) {
 }
 
 const initialForm = {
+  assessed_at: "",
   chief_complaint: "",
   chest_pain_type: "",
   pain_severity: "",
@@ -138,6 +140,7 @@ export default function FrapCardioV2({
   session,
   intakeId: intakeIdProp,
   readOnly = false,
+  isRetrospective = false,
   onDataChanged,
 }) {
   const { intakeId: intakeIdFromParams } = useParams();
@@ -173,6 +176,7 @@ export default function FrapCardioV2({
       }
 
       setForm({
+        assessed_at: toDatetimeLocalValue(data.assessed_at),
         chief_complaint: data.chief_complaint || "",
         chest_pain_type: data.chest_pain_type || "",
         pain_severity: data.pain_severity || "",
@@ -246,6 +250,20 @@ export default function FrapCardioV2({
     if (e) e.preventDefault();
     if (readOnly || !intakeId) return;
 
+    if (isRetrospective && !form.assessed_at) {
+      setError("Captura la fecha y hora declarada de la evaluación cardiovascular.");
+      return;
+    }
+
+    const assessedAtIso = isRetrospective
+      ? localInputToIso(form.assessed_at)
+      : null;
+
+    if (isRetrospective && !assessedAtIso) {
+      setError("La fecha y hora declarada de la evaluación cardiovascular no es válida.");
+      return;
+    }
+
     try {
       setSaving(true);
       setError("");
@@ -254,7 +272,10 @@ export default function FrapCardioV2({
       await v2Api.frapCardioUpsert({
         payload: {
           intake_id: intakeId,
-          ...form,
+          ...(isRetrospective ? { assessed_at: assessedAtIso } : {}),
+          ...Object.fromEntries(
+            Object.entries(form).filter(([key]) => key !== "assessed_at")
+          ),
         },
         token: session?.token,
         companyId: session?.companyId,
@@ -290,6 +311,18 @@ export default function FrapCardioV2({
       {message ? <div style={{ ...helpStyle, color: "#047857" }}>{message}</div> : null}
 
       <form onSubmit={save} style={{ display: "grid", gap: 12 }}>
+        {isRetrospective ? (
+          <Field label="Fecha y hora declarada de la evaluación">
+            <input
+              style={controlStyle}
+              type="datetime-local"
+              value={form.assessed_at}
+              onChange={(e) => updateField("assessed_at", e.target.value)}
+              disabled={readOnly}
+            />
+          </Field>
+        ) : null}
+
         <div style={grid3}>
           <Field label="Motivo principal">
             <input

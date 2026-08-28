@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { v2Api } from "../api/v2";
+import { localInputToIso, toDatetimeLocalValue } from "../../utils/datetime";
 
 const initialForm = {
+  refused_at: "",
   refusal_type: "",
   refusal_reason: "",
   risks_explained: "",
@@ -17,7 +19,12 @@ const initialForm = {
   active: true,
 };
 
-export default function FrapRefusalV2({ session, onDataChanged }) {
+export default function FrapRefusalV2({
+  session,
+  onDataChanged,
+  readOnly = false,
+  isRetrospective = false,
+}) {
   const { intakeId } = useParams();
   const [form, setForm] = useState(initialForm);
   const [error, setError] = useState("");
@@ -37,6 +44,7 @@ export default function FrapRefusalV2({ session, onDataChanged }) {
       });
 
       setForm({
+        refused_at: toDatetimeLocalValue(data?.refused_at),
         refusal_type: data?.refusal_type || "",
         refusal_reason: data?.refusal_reason || "",
         risks_explained: data?.risks_explained || "",
@@ -67,6 +75,22 @@ export default function FrapRefusalV2({ session, onDataChanged }) {
 
   const onSubmit = async (e) => {
     e.preventDefault();
+    if (readOnly || !intakeId) return;
+
+    if (isRetrospective && !form.refused_at) {
+      setError("Captura la fecha y hora declarada de la negativa.");
+      return;
+    }
+
+    const refusedAtIso = isRetrospective
+      ? localInputToIso(form.refused_at)
+      : null;
+
+    if (isRetrospective && !refusedAtIso) {
+      setError("La fecha y hora declarada de la negativa no es válida.");
+      return;
+    }
+
     try {
       setSaving(true);
       setError("");
@@ -74,7 +98,10 @@ export default function FrapRefusalV2({ session, onDataChanged }) {
       await v2Api.frapRefusalUpsert({
         payload: {
           intake_id: intakeId,
-          ...form,
+          ...(isRetrospective ? { refused_at: refusedAtIso } : {}),
+          ...Object.fromEntries(
+            Object.entries(form).filter(([key]) => key !== "refused_at")
+          ),
           signature_pending: !!form.signature_pending,
           active: !!form.active,
         },
@@ -99,6 +126,21 @@ export default function FrapRefusalV2({ session, onDataChanged }) {
       <h3 style={{ marginTop: 0 }}>Negativa de atención / traslado</h3>
 
       <form onSubmit={onSubmit} style={{ display: "grid", gap: 12 }}>
+        <fieldset
+          disabled={readOnly}
+          style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: "grid", gap: 12 }}
+        >
+          {isRetrospective ? (
+            <label style={labelStyle}>
+              Fecha y hora declarada de la negativa
+              <input
+                type="datetime-local"
+                value={form.refused_at}
+                onChange={(e) => onChange("refused_at", e.target.value)}
+              />
+            </label>
+          ) : null}
+
         <div style={grid2}>
           <label style={labelStyle}>
             Tipo de negativa
@@ -190,6 +232,7 @@ export default function FrapRefusalV2({ session, onDataChanged }) {
             {saving ? "Guardando..." : "Guardar negativa"}
           </button>
         </div>
+        </fieldset>
       </form>
 
       {loading && <p style={{ color: "#6b7280" }}>Cargando negativa...</p>}

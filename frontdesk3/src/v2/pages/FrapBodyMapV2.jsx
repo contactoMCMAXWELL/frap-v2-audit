@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { v2Api } from "../api/v2";
+import { localInputToIso, toDatetimeLocalValue } from "../../utils/datetime";
 
 const cardStyle = {
   background: "#fff",
@@ -200,6 +201,7 @@ const VIEW_LABELS = {
 
 function emptyForm() {
   return {
+    assessed_at: "",
     status: "draft",
     anterior_regions: [],
     posterior_regions: [],
@@ -551,6 +553,7 @@ export default function FrapBodyMapV2({
   session,
   intakeId,
   readOnly = false,
+  isRetrospective = false,
   onSaved,
 }) {
   const [form, setForm] = useState(emptyForm());
@@ -580,6 +583,7 @@ export default function FrapBodyMapV2({
 
       if (data) {
         setForm({
+          assessed_at: toDatetimeLocalValue(data.assessed_at),
           status: data.status || "draft",
           anterior_regions: Array.isArray(data.anterior_regions)
             ? data.anterior_regions
@@ -691,6 +695,20 @@ export default function FrapBodyMapV2({
   async function save() {
     if (readOnly || !intakeId) return;
 
+    if (isRetrospective && !form.assessed_at) {
+      setError("Captura la fecha y hora declarada de la evaluación corporal.");
+      return;
+    }
+
+    const assessedAtIso = isRetrospective
+      ? localInputToIso(form.assessed_at)
+      : null;
+
+    if (isRetrospective && !assessedAtIso) {
+      setError("La fecha y hora declarada de la evaluación corporal no es válida.");
+      return;
+    }
+
     try {
       setSaving(true);
       setError("");
@@ -699,6 +717,7 @@ export default function FrapBodyMapV2({
       await v2Api.bodyMapUpsert({
         intakeId,
         payload: {
+          ...(isRetrospective ? { assessed_at: assessedAtIso } : {}),
           status: form.status || null,
           anterior_regions: form.anterior_regions || [],
           posterior_regions: form.posterior_regions || [],
@@ -738,6 +757,26 @@ export default function FrapBodyMapV2({
       ) : null}
 
       <div style={{ display: "grid", gap: 18 }}>
+        {isRetrospective ? (
+          <section style={panelStyle}>
+            <div style={fieldStyle}>
+              <div style={labelStyle}>
+                Fecha y hora declarada de la evaluación
+              </div>
+              <input
+                style={inputStyle}
+                type="datetime-local"
+                value={form.assessed_at}
+                disabled={readOnly}
+                onChange={(e) => updateField("assessed_at", e.target.value)}
+              />
+              <div style={helpStyle}>
+                Corresponde al momento de la evaluación corporal, no al momento de captura.
+              </div>
+            </div>
+          </section>
+        ) : null}
+
         <section style={panelStyle}>
           <div style={{ display: "grid", gap: 4 }}>
             <h4 style={blockTitleStyle}>Estado del registro</h4>

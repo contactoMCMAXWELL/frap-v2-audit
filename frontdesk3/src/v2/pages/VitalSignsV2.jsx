@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { v2Api } from "../api/v2";
+import { localInputToIso } from "../../utils/datetime";
 
 const initialForm = {
+  taken_at: "",
   taken_at_label: "",
   blood_pressure: "",
   heart_rate: "",
@@ -15,7 +17,12 @@ const initialForm = {
   notes: "",
 };
 
-export default function VitalSignsV2({ session, onDataChanged }) {
+export default function VitalSignsV2({
+  session,
+  onDataChanged,
+  readOnly = false,
+  isRetrospective = false,
+}) {
   const { intakeId } = useParams();
   const [items, setItems] = useState([]);
   const [form, setForm] = useState(initialForm);
@@ -53,6 +60,21 @@ export default function VitalSignsV2({ session, onDataChanged }) {
 
   const onSubmit = async (e) => {
     e.preventDefault();
+    if (readOnly || !intakeId) return;
+
+    if (isRetrospective && !form.taken_at) {
+      setError("Captura la fecha y hora declarada de los signos vitales.");
+      return;
+    }
+
+    const takenAtIso = isRetrospective
+      ? localInputToIso(form.taken_at)
+      : null;
+
+    if (isRetrospective && !takenAtIso) {
+      setError("La fecha y hora declarada de los signos vitales no es válida.");
+      return;
+    }
 
     try {
       setSaving(true);
@@ -61,7 +83,10 @@ export default function VitalSignsV2({ session, onDataChanged }) {
       await v2Api.frapVitalSignCreate({
         payload: {
           intake_id: intakeId,
-          ...form,
+          ...(isRetrospective ? { taken_at: takenAtIso } : {}),
+          ...Object.fromEntries(
+            Object.entries(form).filter(([key]) => key !== "taken_at")
+          ),
         },
         token: session?.token,
         companyId: session?.companyId,
@@ -85,6 +110,21 @@ export default function VitalSignsV2({ session, onDataChanged }) {
       <h3 style={{ marginTop: 0 }}>Signos vitales seriados</h3>
 
       <form onSubmit={onSubmit} style={{ display: "grid", gap: 10, marginBottom: 18 }}>
+        <fieldset
+          disabled={readOnly}
+          style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: "grid", gap: 10 }}
+        >
+          {isRetrospective ? (
+            <label style={labelStyle}>
+              Fecha y hora declarada de la toma
+              <input
+                type="datetime-local"
+                value={form.taken_at}
+                onChange={(e) => onChange("taken_at", e.target.value)}
+              />
+            </label>
+          ) : null}
+
         <div style={grid3}>
           <label style={labelStyle}>
             Momento / etiqueta
@@ -150,6 +190,7 @@ export default function VitalSignsV2({ session, onDataChanged }) {
             {saving ? "Guardando..." : "Agregar signo vital"}
           </button>
         </div>
+        </fieldset>
       </form>
 
       {error && <p style={{ color: "crimson" }}>{error}</p>}

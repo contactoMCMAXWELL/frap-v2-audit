@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { v2Api } from "../api/v2";
+import { localInputToIso, toDatetimeLocalValue } from "../../utils/datetime";
 
 const initialForm = {
+  assessed_at: "",
   trauma_type: "",
   mechanism: "",
   kinematics: "",
@@ -18,7 +20,12 @@ const initialForm = {
   active: true,
 };
 
-export default function FrapTraumaV2({ session, onDataChanged }) {
+export default function FrapTraumaV2({
+  session,
+  onDataChanged,
+  readOnly = false,
+  isRetrospective = false,
+}) {
   const { intakeId } = useParams();
   const [form, setForm] = useState(initialForm);
   const [error, setError] = useState("");
@@ -38,6 +45,7 @@ export default function FrapTraumaV2({ session, onDataChanged }) {
       });
 
       setForm({
+        assessed_at: toDatetimeLocalValue(data?.assessed_at),
         trauma_type: data?.trauma_type || "",
         mechanism: data?.mechanism || "",
         kinematics: data?.kinematics || "",
@@ -69,6 +77,33 @@ export default function FrapTraumaV2({ session, onDataChanged }) {
 
   const onSubmit = async (e) => {
     e.preventDefault();
+
+    if (readOnly) return;
+
+    if (isRetrospective && !form.assessed_at) {
+      setError("Captura la fecha y hora declarada de la evaluación de trauma.");
+      return;
+    }
+
+    const assessedAtIso = isRetrospective
+      ? localInputToIso(form.assessed_at)
+      : null;
+
+    if (isRetrospective && !assessedAtIso) {
+      setError("La fecha y hora declarada de la evaluación de trauma no es válida.");
+      return;
+    }
+
+    const payload = {
+      ...form,
+      active: !!form.active,
+    };
+
+    delete payload.assessed_at;
+    if (isRetrospective) {
+      payload.assessed_at = assessedAtIso;
+    }
+
     try {
       setSaving(true);
       setError("");
@@ -76,8 +111,7 @@ export default function FrapTraumaV2({ session, onDataChanged }) {
       await v2Api.frapTraumaUpsert({
         payload: {
           intake_id: intakeId,
-          ...form,
-          active: !!form.active,
+          ...payload,
         },
         token: session?.token,
         companyId: session?.companyId,
@@ -99,7 +133,29 @@ export default function FrapTraumaV2({ session, onDataChanged }) {
     <div style={cardStyle}>
       <h3 style={{ marginTop: 0 }}>Trauma base</h3>
 
-      <form onSubmit={onSubmit} style={{ display: "grid", gap: 12 }}>
+      <form onSubmit={onSubmit}>
+        <fieldset
+          disabled={readOnly}
+          style={{
+            border: 0,
+            padding: 0,
+            margin: 0,
+            minWidth: 0,
+            display: "grid",
+            gap: 12,
+          }}
+        >
+          {isRetrospective ? (
+            <Field label="Fecha y hora declarada de la evaluación">
+              <input
+                style={controlStyle}
+                type="datetime-local"
+                value={form.assessed_at}
+                onChange={(e) => onChange("assessed_at", e.target.value)}
+              />
+            </Field>
+          ) : null}
+
         <div style={grid2}>
           <Field label="Tipo de trauma">
             <select
@@ -222,6 +278,7 @@ export default function FrapTraumaV2({ session, onDataChanged }) {
             {saving ? "Guardando..." : "Guardar trauma"}
           </button>
         </div>
+        </fieldset>
       </form>
 
       {loading && <p style={{ color: "#6b7280" }}>Cargando trauma...</p>}

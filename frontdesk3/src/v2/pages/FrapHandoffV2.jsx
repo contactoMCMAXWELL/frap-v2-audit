@@ -34,7 +34,11 @@ async function loadHospitalCatalogDirect({ token, companyId, userId }) {
   return Array.isArray(data) ? data : [];
 }
 
-export default function FrapHandoffV2({ session }) {
+export default function FrapHandoffV2({
+  session,
+  readOnly = false,
+  isRetrospective = false,
+}) {
   const { intakeId } = useParams();
 
   const [form, setForm] = useState(initialForm);
@@ -152,13 +156,29 @@ export default function FrapHandoffV2({ session }) {
 
   const onSubmit = async (e) => {
     e.preventDefault();
+    if (readOnly || !intakeId) return;
+
+    if (isRetrospective && !form.handoff_at) {
+      setError("Captura la fecha y hora declarada de la entrega.");
+      return;
+    }
+
+    const handoffAtIso = form.handoff_at
+      ? localInputToIso(form.handoff_at)
+      : null;
+
+    if (isRetrospective && !handoffAtIso) {
+      setError("La fecha y hora declarada de la entrega no es válida.");
+      return;
+    }
+
     try {
       setSaving(true);
       setError("");
       const payload = {
         intake_id: intakeId,
         ...form,
-        handoff_at: localInputToIso(form.handoff_at),
+        handoff_at: handoffAtIso,
       };
       await v2Api.frapHandoffSave({
         payload,
@@ -178,13 +198,17 @@ export default function FrapHandoffV2({ session }) {
     <div style={cardStyle}>
       <h3 style={{ marginTop: 0 }}>Traslado y entrega</h3>
       <form onSubmit={onSubmit} style={{ display: "grid", gap: 12 }}>
+        <fieldset
+          disabled={readOnly}
+          style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: "grid", gap: 12 }}
+        >
         <div style={fieldStyle}>
           <div style={labelText}>Hospital del catálogo</div>
           <select
             style={controlStyle}
             value={selectedHospitalId}
             onChange={(e) => setSelectedHospitalId(e.target.value)}
-            disabled={hospitalLoading}
+            disabled={hospitalLoading || readOnly}
           >
             <option value="">
               {hospitalLoading ? "Cargando hospitales..." : "Selecciona un hospital"}
@@ -261,6 +285,7 @@ export default function FrapHandoffV2({ session }) {
             {saving ? "Guardando..." : "Guardar traslado y entrega"}
           </button>
         </div>
+        </fieldset>
       </form>
     </div>
   );

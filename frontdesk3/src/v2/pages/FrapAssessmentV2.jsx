@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { v2Api } from "../api/v2";
+import { localInputToIso, toDatetimeLocalValue } from "../../utils/datetime";
 
 const cardStyle = {
   background: "#fff",
@@ -78,6 +79,7 @@ const helpStyle = {
 
 function emptyForm() {
   return {
+    assessed_at: "",
     avpu: "",
     glasgow_eye: "",
     glasgow_verbal: "",
@@ -122,6 +124,7 @@ export default function FrapAssessmentV2({
   session,
   intakeId,
   readOnly = false,
+  isRetrospective = false,
 }) {
   const [form, setForm] = useState(emptyForm());
   const [loading, setLoading] = useState(false);
@@ -149,6 +152,7 @@ export default function FrapAssessmentV2({
 
       if (data) {
         setForm({
+          assessed_at: toDatetimeLocalValue(data.assessed_at),
           avpu: data.avpu || "",
           glasgow_eye: data.glasgow_eye ?? "",
           glasgow_verbal: data.glasgow_verbal ?? "",
@@ -197,6 +201,20 @@ export default function FrapAssessmentV2({
   async function save() {
     if (readOnly || !intakeId) return;
 
+    if (isRetrospective && !form.assessed_at) {
+      setError("Captura la fecha y hora declarada de la evaluación clínica.");
+      return;
+    }
+
+    const assessedAtIso = isRetrospective
+      ? localInputToIso(form.assessed_at)
+      : null;
+
+    if (isRetrospective && !assessedAtIso) {
+      setError("La fecha y hora declarada de la evaluación clínica no es válida.");
+      return;
+    }
+
     try {
       setSaving(true);
       setError("");
@@ -205,6 +223,7 @@ export default function FrapAssessmentV2({
       await v2Api.saveAssessment({
         payload: {
           intake_id: intakeId,
+          ...(isRetrospective ? { assessed_at: assessedAtIso } : {}),
           avpu: form.avpu || null,
           glasgow_eye:
             form.glasgow_eye === "" ? null : Number(form.glasgow_eye),
@@ -243,6 +262,22 @@ export default function FrapAssessmentV2({
       {loading ? <div style={helpStyle}>Cargando evaluación...</div> : null}
       {error ? <div style={{ ...helpStyle, color: "#b91c1c" }}>{error}</div> : null}
       {message ? <div style={{ ...helpStyle, color: "#166534" }}>{message}</div> : null}
+
+      {isRetrospective ? (
+        <div style={{ ...fieldStyle, marginBottom: 16 }}>
+          <div style={labelStyle}>Fecha y hora declarada de la evaluación</div>
+          <input
+            style={inputStyle}
+            type="datetime-local"
+            value={form.assessed_at}
+            disabled={readOnly}
+            onChange={(e) => updateField("assessed_at", e.target.value)}
+          />
+          <div style={helpStyle}>
+            Corresponde al momento de la evaluación, no al momento de captura.
+          </div>
+        </div>
+      ) : null}
 
       <div style={{ display: "grid", gap: 18 }}>
         <section style={{ display: "grid", gap: 12 }}>

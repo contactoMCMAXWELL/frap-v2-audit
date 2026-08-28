@@ -1,8 +1,12 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { localInputToIso } from "../../utils/datetime";
 import { v2Api } from "../api/v2";
 
 const initialState = {
+  capture_mode: "realtime",
+  occurred_at: "",
+  retrospective_reason: "",
   service_type: "",
   service_subtype: "",
   priority_operational: 1,
@@ -24,6 +28,12 @@ const initialState = {
 export default function ServiceIntakeCreateV2({ session }) {
   const navigate = useNavigate();
   const [form, setForm] = useState(initialState);
+
+  const normalizedRole = String(session?.role || "").trim().toUpperCase();
+  const canCreateRetrospective =
+    normalizedRole === "ADMIN" || normalizedRole === "SUPERADMIN";
+  const isRetrospective =
+    canCreateRetrospective && form.capture_mode === "retrospective";
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
@@ -60,13 +70,42 @@ export default function ServiceIntakeCreateV2({ session }) {
     setLoading(true);
     setError("");
 
+    if (isRetrospective && !form.occurred_at) {
+      setError("La fecha y hora del servicio son obligatorias para una captura retrospectiva.");
+      return;
+    }
+
+    const {
+      capture_mode,
+      occurred_at,
+      retrospective_reason,
+      ...serviceFields
+    } = form;
+
     const payload = {
-      ...form,
+      ...serviceFields,
+      capture_mode: isRetrospective ? "retrospective" : "realtime",
       priority_operational: Number(form.priority_operational || 1),
       patient_count_estimated: Number(form.patient_count_estimated || 1),
       lat: form.lat ? String(form.lat) : "",
       lng: form.lng ? String(form.lng) : "",
     };
+
+    if (isRetrospective) {
+      const occurredAtIso = localInputToIso(occurred_at);
+
+      if (!occurredAtIso) {
+        setError("La fecha y hora del servicio no son válidas.");
+        return;
+      }
+
+      payload.occurred_at = occurredAtIso;
+
+      const reason = String(retrospective_reason || "").trim();
+      if (reason) {
+        payload.retrospective_reason = reason;
+      }
+    }
 
     const created = await v2Api.serviceIntakeCreate({
       payload,
@@ -91,6 +130,64 @@ export default function ServiceIntakeCreateV2({ session }) {
       </p>
 
       <form onSubmit={onSubmit} style={{ ...formStyle, paddingBottom: 96 }}>
+        {canCreateRetrospective && (
+          <section style={sectionStyle}>
+            <h3 style={{ marginTop: 0 }}>Modalidad de captura</h3>
+
+            <label style={labelStyle}>
+              Tipo de captura
+              <select
+                value={form.capture_mode}
+                onChange={(e) => onChange("capture_mode", e.target.value)}
+              >
+                <option value="realtime">En tiempo real</option>
+                <option value="retrospective">Retrospectiva</option>
+              </select>
+            </label>
+
+            {isRetrospective && (
+              <>
+                <div
+                  style={{
+                    border: "1px solid #f59e0b",
+                    background: "#fffbeb",
+                    color: "#92400e",
+                    borderRadius: 10,
+                    padding: 12,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  Esta modalidad documenta posteriormente un servicio ya ocurrido.
+                  La fecha y hora declaradas corresponderán al momento real del servicio;
+                  el sistema conservará por separado la fecha de registro.
+                </div>
+
+                <label style={labelStyle}>
+                  Fecha y hora del servicio
+                  <input
+                    type="datetime-local"
+                    value={form.occurred_at}
+                    onChange={(e) => onChange("occurred_at", e.target.value)}
+                    required
+                  />
+                </label>
+
+                <label style={labelStyle}>
+                  Motivo de captura retrospectiva
+                  <textarea
+                    rows={3}
+                    value={form.retrospective_reason}
+                    onChange={(e) =>
+                      onChange("retrospective_reason", e.target.value)
+                    }
+                    placeholder="Motivo u observación administrativa opcional"
+                  />
+                </label>
+              </>
+            )}
+          </section>
+        )}
+
         <section style={sectionStyle}>
           <h3>Datos generales</h3>
 
