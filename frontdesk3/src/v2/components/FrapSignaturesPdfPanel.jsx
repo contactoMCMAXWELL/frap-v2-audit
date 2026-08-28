@@ -88,6 +88,27 @@ async function apiGet(path, session) {
   return await res.text();
 }
 
+async function apiPost(path, session, payload) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: {
+      ...buildSessionHeaders(session),
+      "Content-Type": "application/json",
+    },
+    body: payload === undefined ? undefined : JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    throw new Error(await readError(res));
+  }
+
+  const contentType = res.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    return await res.json();
+  }
+  return null;
+}
+
 async function apiPut(path, session, payload) {
   const res = await fetch(`${API_BASE}${path}`, {
     method: "PUT",
@@ -473,11 +494,12 @@ function SignatureCard({
   );
 }
 
-export default function FrapSignaturesPdfPanel({ session, intakeId, intake }) {
+export default function FrapSignaturesPdfPanel({ session, intakeId, intake, onIntakeChanged }) {
   const [signatures, setSignatures] = useState([]);
   const [validation, setValidation] = useState(null);
   const [loading, setLoading] = useState(false);
   const [busyPdf, setBusyPdf] = useState(false);
+  const [approving, setApproving] = useState(false);
   const [error, setError] = useState("");
   const [showWhatsappModal, setShowWhatsappModal] = useState(false);
 
@@ -567,6 +589,39 @@ export default function FrapSignaturesPdfPanel({ session, intakeId, intake }) {
   };
 
   const ready = Boolean(validation?.is_ready_for_pdf);
+  const normalizedRole = String(session?.role || "").trim().toUpperCase();
+  const canApproveRetrospective =
+    normalizedRole === "ADMIN" || normalizedRole === "SUPERADMIN";
+  const isRetrospective = intake?.capture_mode === "retrospective";
+  const isRetrospectiveApproved = Boolean(
+    intake?.approved_at && intake?.approved_by_user_id
+  );
+
+  const approveRetrospective = async () => {
+    if (!isRetrospective || !canApproveRetrospective || isRetrospectiveApproved) {
+      return;
+    }
+
+    try {
+      setApproving(true);
+      setError("");
+
+      await apiPost(
+        `/service-intake/${intakeId}/approve-retrospective`,
+        session
+      );
+
+      if (onIntakeChanged) {
+        await onIntakeChanged();
+      }
+
+      await refreshAll();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setApproving(false);
+    }
+  };
 
   return (
     <div style={{ display: "grid", gap: 18 }}>
@@ -621,6 +676,42 @@ export default function FrapSignaturesPdfPanel({ session, intakeId, intake }) {
             Inconsistencia: {validation.inconsistency}
           </div>
         ) : null}
+
+        {isRetrospective && (
+          <div
+            style={{
+              marginBottom: 12,
+              padding: 12,
+              border: "1px solid #f59e0b",
+              borderRadius: 12,
+              background: "#fffbeb",
+              color: "#78350f",
+            }}
+          >
+            <div style={{ fontWeight: 800, marginBottom: 6 }}>
+              Aprobación administrativa retrospectiva
+            </div>
+
+            {isRetrospectiveApproved ? (
+              <div>
+                Captura retrospectiva aprobada
+                {intake?.approved_at ? ` · ${intake.approved_at}` : ""}
+              </div>
+            ) : canApproveRetrospective ? (
+              <button
+                type="button"
+                onClick={approveRetrospective}
+                disabled={approving}
+              >
+                {approving ? "Aprobando..." : "Aprobar captura retrospectiva"}
+              </button>
+            ) : (
+              <div>
+                Pendiente de aprobación por ADMIN o SUPERADMIN.
+              </div>
+            )}
+          </div>
+        )}
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <button type="button" onClick={refreshAll} disabled={loading}>

@@ -771,7 +771,7 @@ export default function ServiceTimelineV2({ session }) {
 
           {caps.clinical.view && (
             <div id="firmas-pdf">
-              <FrapPdfSectionV2 session={pdfSession} intake={intake} />
+              <FrapPdfSectionV2 session={pdfSession} intake={intake} onIntakeChanged={load} />
             </div>
           )}
         </SectionShell>
