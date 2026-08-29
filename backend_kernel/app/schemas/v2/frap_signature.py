@@ -65,6 +65,7 @@ class FrapSignatureValidationOut(BaseModel):
     case_type: str
     is_ready_for_pdf: bool
     missing_signature_roles: list[str]
+    missing_operational_events: list[str] = []
     inconsistency: Optional[str] = None
     requires_retrospective_approval: bool = False
     is_retrospective_approved: bool = False

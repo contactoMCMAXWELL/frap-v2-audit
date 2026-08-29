@@ -29,8 +29,14 @@ READ_ROLES = {"SUPERADMIN", "ADMIN", "DISPATCH", "PARAMEDIC", "DOCTOR", "RECEIVE
 SIGN_OPERATOR_ROLES = {"SUPERADMIN", "ADMIN", "PARAMEDIC"}
 SIGN_RECEIVER_ROLES = {"SUPERADMIN", "ADMIN", "DOCTOR", "RECEIVER_MD"}
 SIGN_PATIENT_ROLES = {"SUPERADMIN", "ADMIN", "PARAMEDIC"}
+SIGN_EVENT_RESPONSIBLE_ROLES = {"SUPERADMIN", "ADMIN", "DISPATCH", "PARAMEDIC"}
 
-ALLOWED_SIGNATURE_ROLES = {"operator", "receiver", "patient"}
+ALLOWED_SIGNATURE_ROLES = {
+    "operator",
+    "receiver",
+    "patient",
+    "event_responsible",
+}
 
 
 def _now_utc() -> datetime:
@@ -47,7 +53,9 @@ def _normalize_signature_role(value: str) -> str:
         "doctor": "receiver",
         "autoridad": "receiver",
         "paciente": "patient",
-        "responsable": "patient",
+        "responsable": "event_responsible",
+        "responsable_evento": "event_responsible",
+        "responsable_evento_guardia": "event_responsible",
     }
     role = aliases.get(role, role)
 
@@ -75,7 +83,19 @@ def _require_sign_role(user, signature_role: str) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No autorizado para firma receptor")
 
     if signature_role == "patient" and role not in SIGN_PATIENT_ROLES:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No autorizado para firma paciente/responsable")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No autorizado para firma paciente/responsable",
+        )
+
+    if (
+        signature_role == "event_responsible"
+        and role not in SIGN_EVENT_RESPONSIBLE_ROLES
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No autorizado para registrar firma de responsable del evento",
+        )
 
 
 def _require_intake(db: Session, company_id: uuid.UUID, intake_id: uuid.UUID) -> ServiceIntakeV2:
@@ -97,7 +117,7 @@ def _validate_payload(payload: FrapSignatureV2Upsert, normalized_role: str, user
     image_base64 = str(payload.image_base64 or "").strip()
     refused_to_sign = bool(payload.refused_to_sign)
 
-    if normalized_role in {"operator", "receiver"}:
+    if normalized_role in {"operator", "receiver", "event_responsible"}:
         if not signer_name:
             raise HTTPException(status_code=400, detail="signer_name es obligatorio")
         if not image_base64:
@@ -215,11 +235,17 @@ def upsert_frap_signature(
     db.commit()
     db.refresh(row)
 
+    signature_event_type = (
+        "operational.signature_updated"
+        if normalized_role == "event_responsible"
+        else "clinical.signature_updated"
+    )
+
     create_dispatch_event(
         db=db,
         company_id=company_id,
         intake_id=payload.intake_id,
-        event_type="clinical.signature_updated",
+        event_type=signature_event_type,
         status_label=f"Firma registrada: {normalized_role}",
         payload={
             "signature_role": normalized_role,

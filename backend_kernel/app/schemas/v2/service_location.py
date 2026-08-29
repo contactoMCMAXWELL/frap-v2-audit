@@ -18,6 +18,8 @@ class ServiceLocationV2Base(BaseModel):
     lat: Optional[float] = Field(default=None, ge=-90, le=90)
     lng: Optional[float] = Field(default=None, ge=-180, le=180)
 
+    location_source: str = "unknown"
+
     sequence: int = 1
     active: bool = True
 

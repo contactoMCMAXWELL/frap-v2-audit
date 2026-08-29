@@ -17,7 +17,7 @@
       margin: 18mm 14mm 18mm 14mm;
 
       @bottom-left {
-        content: "FRAP V2 - Documento Médico Legal";
+        content: "{% if payload.case_type == 'standby_operational' %}Constancia Operativa de Guardia / Evento{% else %}FRAP V2 - Documento Médico Legal{% endif %}";
         font-size: 9px;
         color: #6b7280;
       }
@@ -363,7 +363,8 @@
     <div class="case-banner">
       <div class="case-title">Tipo de cierre del servicio</div>
       <div>
-        {% if payload.case_type == "handoff" %}Traslado y entrega hospitalaria
+        {% if payload.case_type == "standby_operational" %}Guardia / cobertura operativa sin atención clínica
+        {% elif payload.case_type == "handoff" %}Traslado y entrega hospitalaria
         {% elif payload.case_type == "refusal" %}Negativa de atención / traslado
         {% else %}Cierre no determinado{% endif %}
       </div>
@@ -374,7 +375,9 @@
       <table class="grid-2"><tr>
         <td class="card"><table class="meta-table">
           <tr><td class="meta-label">Tipo de servicio</td><td class="meta-value">{{ payload.service.service_type|display or "N/D" }}</td></tr>
+          {% if payload.case_type != "standby_operational" %}
           <tr><td class="meta-label">Subtipo</td><td class="meta-value">{{ payload.service.service_subtype|display or "N/D" }}</td></tr>
+          {% endif %}
           <tr>
             <td class="meta-label">Modalidad operativa</td>
             <td class="meta-value">
@@ -385,7 +388,9 @@
             </td>
           </tr>
           <tr><td class="meta-label">Prioridad operativa</td><td class="meta-value">{{ payload.service.priority_operational|display or "N/D" }}</td></tr>
+          {% if payload.case_type != "standby_operational" %}
           <tr><td class="meta-label">Prioridad clínica</td><td class="meta-value">{{ payload.service.priority_clinical|display or "N/D" }}</td></tr>
+          {% endif %}
           <tr><td class="meta-label">Ubicación</td><td class="meta-value">{{ payload.service.location_text|display or "N/D" }}</td></tr>
           <tr><td class="meta-label">Referencia</td><td class="meta-value">{{ payload.service.location_reference|display or "N/D" }}</td></tr>
           <tr><td class="meta-label">Fuente de llamada</td><td class="meta-value">{{ payload.service.call_source|display or "N/D" }}</td></tr>
@@ -395,8 +400,10 @@
         <td class="card"><table class="meta-table">
           <tr><td class="meta-label">Servicio relacionado</td><td class="meta-value">{{ payload.service.service_record.id if payload.service.service_record else "N/D" }}</td></tr>
           <tr><td class="meta-label">Unidad</td><td class="meta-value">{{ payload.service.unit.code if payload.service.unit else "N/D" }}</td></tr>
+          {% if payload.case_type != "standby_operational" %}
           <tr><td class="meta-label">Destino sugerido</td><td class="meta-value">{{ payload.service.destination_suggested|display or "N/D" }}</td></tr>
           <tr><td class="meta-label">Pacientes estimados</td><td class="meta-value">{{ payload.service.patient_count_estimated|display or "N/D" }}</td></tr>
+          {% endif %}
           <tr><td class="meta-label">Riesgo en escena</td><td class="meta-value">{{ payload.service.scene_risk|display or "N/D" }}</td></tr>
           <tr><td class="meta-label">Tipo de pagador</td><td class="meta-value">{{ payload.service.payer_type|display or "N/D" }}</td></tr>
           <tr><td class="meta-label">Creado</td><td class="meta-value">{{ payload.service.created_at_display or payload.service.created_at|fmt_dt }}</td></tr>
@@ -452,6 +459,18 @@
                 {% if location.reference %}
                 <tr><td class="meta-label">Referencia</td><td class="meta-value">{{ location.reference|display }}</td></tr>
                 {% endif %}
+                {% if location.lat is not none and location.lng is not none %}
+                <tr><td class="meta-label">Coordenadas</td><td class="meta-value">{{ location.lat }}, {{ location.lng }}</td></tr>
+                {% endif %}
+                <tr>
+                  <td class="meta-label">Fuente de ubicación</td>
+                  <td class="meta-value">
+                    {% if location.location_source == "device_gps" %}GPS del dispositivo
+                    {% elif location.location_source == "geocoded_address" %}Obtenida desde dirección
+                    {% elif location.location_source == "manual_coordinates" %}Capturada manualmente
+                    {% else %}No especificada{% endif %}
+                  </td>
+                </tr>
                 {% endif %}
               {% endfor %}
           {% else %}
@@ -511,6 +530,25 @@
       </div>
     </div>
     {% endif %}
+
+    {% if payload.case_type == "standby_operational" %}
+    <div class="section">
+      <div class="section-title">Constancia operativa de guardia / evento</div>
+      <div class="card">
+        <table class="meta-table">
+          <tr><td class="meta-label">Evento</td><td class="meta-value">{{ payload.service.standby_event_name|display or "N/D" }}</td></tr>
+          <tr><td class="meta-label">Unidad</td><td class="meta-value">{{ payload.service.unit.code if payload.service.unit else "N/D" }}</td></tr>
+          <tr><td class="meta-label">Inicio programado</td><td class="meta-value">{{ payload.service.standby_starts_at_display or "N/D" }}</td></tr>
+          <tr><td class="meta-label">Fin programado</td><td class="meta-value">{{ payload.service.standby_ends_at_display or "N/D" }}</td></tr>
+          <tr><td class="meta-label">Solicitante</td><td class="meta-value">{{ payload.service.caller_name|display or "N/D" }}</td></tr>
+          <tr><td class="meta-label">Pagador</td><td class="meta-value">{{ payload.service.payer_type|display or "N/D" }}</td></tr>
+          {% if payload.service.notes %}
+          <tr><td class="meta-label">Observaciones</td><td class="meta-value">{{ payload.service.notes|display }}</td></tr>
+          {% endif %}
+        </table>
+      </div>
+    </div>
+    {% else %}
 
     <div class="section">
       <div class="section-title">Datos del paciente</div>
@@ -686,8 +724,10 @@
     </table></div></div>
     {% endif %}
 
+    {% endif %}
+
     {% if payload.timeline %}
-    <div class="section"><div class="section-title">Timeline clínico / operativo</div>
+    <div class="section"><div class="section-title">{% if payload.case_type == "standby_operational" %}Timeline operativo{% else %}Timeline clínico / operativo{% endif %}</div>
       <table class="table"><thead><tr><th style="width:20%;">Fecha / hora</th><th style="width:24%;">Evento</th><th style="width:20%;">Estatus</th><th>Detalle</th></tr></thead><tbody>
       {% for item in payload.timeline %}
       <tr>
@@ -702,7 +742,7 @@
     {% endif %}
 
     {% if payload.signatures %}
-    <div class="section page-break"><div class="section-title">Firmas</div><table class="signature-table"><tr>
+    <div class="section page-break"><div class="section-title">{% if payload.case_type == "standby_operational" %}Firma del responsable / autoridad del evento{% else %}Firmas{% endif %}</div><table class="signature-table"><tr>
       {% for sig in payload.signatures %}
       <td class="signature-box">
         <div class="signature-role">{{ sig.signature_role|sig_title }}</div>
@@ -749,7 +789,7 @@
     </div>
     {% endif %}
 
-    {% if payload.legal_blocks %}
+    {% if payload.legal_blocks and payload.case_type != "standby_operational" %}
     <div class="section">
       <div class="section-title">Leyendas y notas legales</div>
       {% for block in payload.legal_blocks %}

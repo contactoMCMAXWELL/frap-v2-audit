@@ -30,6 +30,8 @@ ALLOWED_EVENT_TYPES = {
     "unit_reassigned": "Unidad reasignada",
     "unit_en_route": "Unidad en ruta",
     "unit_on_scene": "Unidad en escena",
+    "standby_started": "Cobertura iniciada",
+    "standby_finished": "Cobertura finalizada",
     "patient_contact": "Contacto con paciente",
     "transport_started": "Inicio de traslado",
     "hospital_arrival": "Llegada a hospital",

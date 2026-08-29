@@ -70,6 +70,13 @@ class ServiceLocationV2(Base):
         nullable=True,
     )
 
+    location_source: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="unknown",
+        server_default="unknown",
+    )
+
     sequence: Mapped[int] = mapped_column(
         Integer,
         nullable=False,

@@ -80,6 +80,7 @@ function buildLocationPayload(location) {
       String(location.lng || "").trim() === ""
         ? null
         : Number(location.lng),
+    location_source: String(location.location_source || "unknown").trim() || "unknown",
     sequence: Number(location.sequence || 1),
     active: location.active !== false,
   };
@@ -248,6 +249,7 @@ export default function ServiceIntakeCreateV2({ session }) {
           ...prev,
           lat: String(pos.coords.latitude),
           lng: String(pos.coords.longitude),
+          location_source: "device_gps",
         }));
         setGeoLoadingKey("");
       },
@@ -1072,11 +1074,16 @@ function LocationSection({
   geoLoadingKey,
   onUseMyLocation,
 }) {
-  const onChange = (key, value) => {
+  const onChange = (key, value, source = null) => {
     setLocation((prev) => ({
       ...prev,
       [key]: value,
+      ...(source ? { location_source: source } : {}),
     }));
+
+    if (source === "manual_coordinates") {
+      setAddressMessage("");
+    }
   };
 
   const geoLoading =
@@ -1084,6 +1091,37 @@ function LocationSection({
 
   const [addressLoading, setAddressLoading] = useState(false);
   const [addressMessage, setAddressMessage] = useState("");
+
+  const hasCoordinates =
+    String(location?.lat || "").trim() !== "" &&
+    String(location?.lng || "").trim() !== "";
+
+  const sourceLabel = (() => {
+    const source = String(location?.location_source || "unknown").trim();
+
+    if (source === "device_gps") {
+      return "Coordenadas obtenidas por GPS del dispositivo";
+    }
+
+    if (source === "geocoded_address") {
+      return "Coordenadas obtenidas desde la dirección";
+    }
+
+    if (source === "manual_coordinates") {
+      return "Coordenadas capturadas manualmente";
+    }
+
+    return hasCoordinates
+      ? "Origen de las coordenadas no identificado"
+      : "";
+  })();
+
+  const locateAddressButtonLabel =
+    hasCoordinates &&
+    String(location?.address_text || "").trim() &&
+    location?.location_source !== "geocoded_address"
+      ? "Reemplazar con ubicación de la dirección"
+      : "Ubicar dirección";
 
   const locateAddress = async () => {
     const address = String(location?.address_text || "").trim();
@@ -1110,6 +1148,7 @@ function LocationSection({
         ...prev,
         lat: String(result.lat),
         lng: String(result.lng),
+        location_source: "geocoded_address",
       }));
 
       setAddressMessage(
@@ -1211,7 +1250,7 @@ function LocationSection({
           <input
             value={location.lat}
             onChange={(e) =>
-              onChange("lat", e.target.value)
+              onChange("lat", e.target.value, "manual_coordinates")
             }
           />
         </label>
@@ -1221,7 +1260,7 @@ function LocationSection({
           <input
             value={location.lng}
             onChange={(e) =>
-              onChange("lng", e.target.value)
+              onChange("lng", e.target.value, "manual_coordinates")
             }
           />
         </label>
@@ -1261,9 +1300,22 @@ function LocationSection({
         >
           {addressLoading
             ? "Ubicando dirección..."
-            : "Ubicar dirección"}
+            : locateAddressButtonLabel}
         </button>
       </div>
+
+      {!!sourceLabel && (
+        <div
+          style={{
+            ...helperText,
+            marginTop: 8,
+            color: "#475569",
+            fontWeight: 600,
+          }}
+        >
+          {sourceLabel}
+        </div>
+      )}
 
       {!!addressMessage && (
         <div

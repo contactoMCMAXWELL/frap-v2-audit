@@ -42,6 +42,12 @@ const SIGNATURE_ROLE_META = {
     canvasLabel: "Firma de paciente / responsable",
     requiresRelation: true,
   },
+  event_responsible: {
+    title: "Responsable / Autoridad del evento",
+    defaultRoleLabel: "Responsable del evento",
+    canvasLabel: "Firma del responsable / autoridad",
+    requiresRelation: false,
+  },
 };
 
 function buildSessionHeaders(session) {
@@ -589,6 +595,8 @@ export default function FrapSignaturesPdfPanel({ session, intakeId, intake, onIn
   };
 
   const ready = Boolean(validation?.is_ready_for_pdf);
+  const isStandbyOperational =
+    intake?.operation_mode === "standby" && !intake?.parent_intake_id;
   const normalizedRole = String(session?.role || "").trim().toUpperCase();
   const canApproveRetrospective =
     normalizedRole === "ADMIN" || normalizedRole === "SUPERADMIN";
@@ -634,7 +642,9 @@ export default function FrapSignaturesPdfPanel({ session, intakeId, intake, onIn
         }}
       >
         <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 10 }}>
-          Firmas y PDF médico-legal
+          {isStandbyOperational
+            ? "Constancia operativa y firma del evento"
+            : "Firmas y PDF médico-legal"}
         </div>
 
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
@@ -668,6 +678,13 @@ export default function FrapSignaturesPdfPanel({ session, intakeId, intake, onIn
         {validation?.missing_signature_roles?.length ? (
           <div style={{ color: "#92400e", marginBottom: 10 }}>
             Faltan firmas: {validation.missing_signature_roles.join(", ")}
+          </div>
+        ) : null}
+
+        {validation?.missing_operational_events?.length ? (
+          <div style={{ color: "#92400e", marginBottom: 10 }}>
+            Faltan eventos operativos:{" "}
+            {validation.missing_operational_events.join(", ")}
           </div>
         ) : null}
 
@@ -771,32 +788,45 @@ export default function FrapSignaturesPdfPanel({ session, intakeId, intake, onIn
           gap: 16,
         }}
       >
-        <SignatureCard
-          session={session}
-          intakeId={intakeId}
-          isRetrospective={intake?.capture_mode === "retrospective"}
-          roleKey="operator"
-          existingSignature={signaturesByRole.operator}
-          onSaved={refreshAll}
-        />
+        {isStandbyOperational ? (
+          <SignatureCard
+            session={session}
+            intakeId={intakeId}
+            isRetrospective={intake?.capture_mode === "retrospective"}
+            roleKey="event_responsible"
+            existingSignature={signaturesByRole.event_responsible}
+            onSaved={refreshAll}
+          />
+        ) : (
+          <>
+            <SignatureCard
+              session={session}
+              intakeId={intakeId}
+              isRetrospective={intake?.capture_mode === "retrospective"}
+              roleKey="operator"
+              existingSignature={signaturesByRole.operator}
+              onSaved={refreshAll}
+            />
 
-        <SignatureCard
-          session={session}
-          intakeId={intakeId}
-          isRetrospective={intake?.capture_mode === "retrospective"}
-          roleKey="receiver"
-          existingSignature={signaturesByRole.receiver}
-          onSaved={refreshAll}
-        />
+            <SignatureCard
+              session={session}
+              intakeId={intakeId}
+              isRetrospective={intake?.capture_mode === "retrospective"}
+              roleKey="receiver"
+              existingSignature={signaturesByRole.receiver}
+              onSaved={refreshAll}
+            />
 
-        <SignatureCard
-          session={session}
-          intakeId={intakeId}
-          isRetrospective={intake?.capture_mode === "retrospective"}
-          roleKey="patient"
-          existingSignature={signaturesByRole.patient}
-          onSaved={refreshAll}
-        />
+            <SignatureCard
+              session={session}
+              intakeId={intakeId}
+              isRetrospective={intake?.capture_mode === "retrospective"}
+              roleKey="patient"
+              existingSignature={signaturesByRole.patient}
+              onSaved={refreshAll}
+            />
+          </>
+        )}
       </div>
       <FrapWhatsappShareModal
         open={showWhatsappModal}

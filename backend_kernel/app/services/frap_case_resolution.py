@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.models.frap_handoff_v2 import FrapHandoffV2
 from app.models.frap_refusal_v2 import FrapRefusalV2
 from app.models.frap_signature_v2 import FrapSignatureV2
+from app.models.service_dispatch_event_v2 import ServiceDispatchEventV2
 from app.models.service_intake_v2 import ServiceIntakeV2
 
 
@@ -41,6 +42,22 @@ def _has_meaningful_handoff(row: FrapHandoffV2 | None) -> bool:
 
 
 def resolve_case_type(db: Session, company_id, intake_id) -> tuple[str, str | None]:
+    intake = (
+        db.query(ServiceIntakeV2)
+        .filter(
+            ServiceIntakeV2.company_id == company_id,
+            ServiceIntakeV2.id == intake_id,
+        )
+        .first()
+    )
+
+    if (
+        intake
+        and str(getattr(intake, "operation_mode", "") or "").strip().lower() == "standby"
+        and getattr(intake, "parent_intake_id", None) is None
+    ):
+        return "standby_operational", None
+
     refusal = (
         db.query(FrapRefusalV2)
         .filter(
@@ -109,8 +126,41 @@ def validate_case_signatures(db: Session, company_id, intake_id) -> dict:
     by_role = {str(r.signature_role or "").strip().lower(): r for r in rows}
 
     missing: list[str] = []
+    missing_operational_events: list[str] = []
 
-    if case_type == "refusal":
+    if case_type == "standby_operational":
+        responsible = by_role.get("event_responsible")
+
+        if not responsible or not responsible.image_base64:
+            missing.append("event_responsible")
+
+        events = (
+            db.query(ServiceDispatchEventV2)
+            .filter(
+                ServiceDispatchEventV2.company_id == company_id,
+                ServiceDispatchEventV2.intake_id == intake_id,
+            )
+            .all()
+        )
+
+        event_types = {
+            str(getattr(row, "event_type", "") or "").strip().lower()
+            for row in events
+        }
+
+        if not ({"unit_assigned", "unit_reassigned"} & event_types):
+            missing_operational_events.append("unit_assigned")
+
+        for required_event in (
+            "unit_on_scene",
+            "standby_started",
+            "standby_finished",
+            "service_closed",
+        ):
+            if required_event not in event_types:
+                missing_operational_events.append(required_event)
+
+    elif case_type == "refusal":
         operator = by_role.get("operator")
         patient = by_role.get("patient")
 
@@ -138,8 +188,9 @@ def validate_case_signatures(db: Session, company_id, intake_id) -> dict:
         missing = []
 
     base_ready_for_pdf = (
-        case_type in {"refusal", "handoff"}
+        case_type in {"refusal", "handoff", "standby_operational"}
         and not missing
+        and not missing_operational_events
         and not inconsistency
     )
 
@@ -148,6 +199,7 @@ def validate_case_signatures(db: Session, company_id, intake_id) -> dict:
         "case_type": case_type,
         "is_ready_for_pdf": base_ready_for_pdf and not approval_missing,
         "missing_signature_roles": missing,
+        "missing_operational_events": missing_operational_events,
         "inconsistency": inconsistency,
         "requires_retrospective_approval": is_retrospective,
         "is_retrospective_approved": is_retrospective_approved,

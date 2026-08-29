@@ -59,6 +59,14 @@ const DISPATCH_ACTIONS = [
   { event_type: "service_closed", status_label: "Servicio cerrado" },
 ];
 
+const STANDBY_DISPATCH_ACTIONS = [
+  { event_type: "unit_en_route", status_label: "Unidad en ruta" },
+  { event_type: "unit_on_scene", status_label: "Unidad en sitio" },
+  { event_type: "standby_started", status_label: "Cobertura iniciada" },
+  { event_type: "standby_finished", status_label: "Cobertura finalizada" },
+  { event_type: "service_closed", status_label: "Servicio cerrado" },
+];
+
 const CATEGORY_COLORS = {
   Operación: { bg: "#eff6ff", fg: "#1d4ed8", border: "#bfdbfe" },
   Clínico: { bg: "#ecfdf5", fg: "#047857", border: "#a7f3d0" },
@@ -361,6 +369,8 @@ export default function ServiceTimelineV2({ session }) {
       "unit_reassigned",
       "unit_en_route",
       "unit_on_scene",
+      "standby_started",
+      "standby_finished",
       "patient_contact",
       "transport_started",
       "hospital_arrival",
@@ -379,14 +389,30 @@ export default function ServiceTimelineV2({ session }) {
     units.find((u) => u.id === currentUnitId)?.code ||
     "";
 
+  const isStandbyOperational =
+    intake?.operation_mode === "standby" && !intake?.parent_intake_id;
+
+  const dispatchActions =
+    isStandbyOperational
+      ? STANDBY_DISPATCH_ACTIONS
+      : DISPATCH_ACTIONS;
+
   const quickFacts = useMemo(
-    () => [
-      { label: "Servicio", value: intake?.service_type || "Servicio" },
-      { label: "Paciente", value: intake?.patient_name || intake?.caller_name || "Por identificar" },
-      { label: "Unidad", value: currentUnitCode || "Sin unidad" },
-      { label: "Hospital sugerido", value: intake?.destination_suggested || "No especificado" },
-    ],
-    [currentUnitCode, intake]
+    () =>
+      isStandbyOperational
+        ? [
+            { label: "Servicio", value: intake?.service_type || "Guardia / cobertura" },
+            { label: "Evento", value: intake?.standby_event_name || "Sin nombre" },
+            { label: "Unidad", value: currentUnitCode || "Sin unidad" },
+            { label: "Modalidad", value: "Guardia / cobertura" },
+          ]
+        : [
+            { label: "Servicio", value: intake?.service_type || "Servicio" },
+            { label: "Paciente", value: intake?.patient_name || intake?.caller_name || "Por identificar" },
+            { label: "Unidad", value: currentUnitCode || "Sin unidad" },
+            { label: "Hospital sugerido", value: intake?.destination_suggested || "No especificado" },
+          ],
+    [currentUnitCode, intake, isStandbyOperational]
   );
 
   const structuredLocations = useMemo(() => {
@@ -652,7 +678,21 @@ export default function ServiceTimelineV2({ session }) {
 
       <ServiceSectionLauncherV2
         caps={caps}
-        groups={SERVICE_SECTION_GROUPS}
+        groups={
+          isStandbyOperational
+            ? SERVICE_SECTION_GROUPS.filter((group) => {
+                const label = String(
+                  group?.label || group?.title || group?.name || ""
+                ).toUpperCase();
+
+                return ![
+                  "ATENCIÓN CLÍNICA",
+                  "ESPECIALIDADES Y LESIONES",
+                  "CIERRE MÉDICO-LEGAL",
+                ].includes(label);
+              })
+            : SERVICE_SECTION_GROUPS
+        }
         onNavigate={scrollToSection}
         onGoTop={scrollToTop}
         allExpanded={allExpanded}
@@ -907,7 +947,7 @@ export default function ServiceTimelineV2({ session }) {
                   </div>
 
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    {DISPATCH_ACTIONS.map((action) => (
+                    {dispatchActions.map((action) => (
                       <button
                         key={action.event_type}
                         type="button"
@@ -1018,7 +1058,7 @@ export default function ServiceTimelineV2({ session }) {
         </SectionShell>
       )}
 
-      {caps.clinical.view && (
+      {!isStandbyOperational && caps.clinical.view && (
         <SectionShell
           id="frap-clinico"
           expanded={sectionState["frap-clinico"]}
@@ -1069,7 +1109,8 @@ export default function ServiceTimelineV2({ session }) {
         </SectionShell>
       )}
 
-      {(caps.vitals.view || caps.procedures.view || caps.medications.view || caps.trauma.view) && (
+      {!isStandbyOperational &&
+        (caps.vitals.view || caps.procedures.view || caps.medications.view || caps.trauma.view) && (
         <SectionShell
           id="signos-vitales"
           expanded={sectionState["signos-vitales"]}
@@ -1120,7 +1161,26 @@ export default function ServiceTimelineV2({ session }) {
         </SectionShell>
       )}
 
-      {(caps.refusal.view || caps.handoff.view || caps.clinical.view) && (
+      {isStandbyOperational && caps.clinical.view && (
+        <SectionShell
+          id="cierre-operativo-guardia"
+          expanded={sectionState["cierre-operativo-guardia"]}
+          onToggle={(open) => updateSection("cierre-operativo-guardia", open)}
+          title="Cierre operativo de guardia"
+          description="Validación operativa, firma del responsable del evento y constancia documental."
+        >
+          <div id="firmas-pdf">
+            <FrapPdfSectionV2
+              session={pdfSession}
+              intake={intake}
+              onIntakeChanged={load}
+            />
+          </div>
+        </SectionShell>
+      )}
+
+      {!isStandbyOperational &&
+        (caps.refusal.view || caps.handoff.view || caps.clinical.view) && (
         <SectionShell
           id="negativa-atencion"
           expanded={sectionState["negativa-atencion"]}

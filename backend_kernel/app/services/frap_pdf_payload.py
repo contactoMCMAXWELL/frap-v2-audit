@@ -69,6 +69,8 @@ OPERATIONAL_EVENT_LABELS = {
     "unit_reassigned": "Unidad reasignada",
     "unit_en_route": "Unidad en ruta",
     "unit_on_scene": "Unidad en escena",
+    "standby_started": "Cobertura iniciada",
+    "standby_finished": "Cobertura finalizada",
     "patient_contact": "Contacto con paciente",
     "transport_started": "Inicio de traslado",
     "hospital_arrival": "Llegada a hospital",
@@ -81,6 +83,7 @@ OPERATIONAL_EVENT_LABELS = {
     "clinical.handoff_completed": "Entrega de paciente registrada",
     "clinical.refusal_recorded": "Negativa de atención registrada",
     "clinical.signature_updated": "Firma registrada",
+    "operational.signature_updated": "Firma del responsable registrada",
     "clinical.trauma_updated": "Evaluación de trauma registrada",
     "clinical.procedure_updated": "Procedimiento realizado",
     "clinical.medication_updated": "Medicamento administrado",
@@ -456,7 +459,7 @@ def _timeline_detail_text(row: ServiceDispatchEventV2) -> str:
 
     if event_type == "unit_on_scene":
         detail = _compact_detail_text(payload, ["unit_name", "unit_code"])
-        return detail or "Unidad en escena con paciente."
+        return detail or "Unidad arribó y quedó posicionada en el sitio."
 
     if event_type == "patient_contact":
         detail = _compact_detail_text(payload, ["contact_type", "patient_count_estimated"])
@@ -474,8 +477,14 @@ def _timeline_detail_text(row: ServiceDispatchEventV2) -> str:
         detail = _compact_detail_text(payload, ["closure_reason", "closure_type"])
         return detail or "Servicio cerrado."
 
-    if event_type == "clinical.signature_updated":
-        return _compact_detail_text(payload, ["signer_name", "signer_role", "signature_role", "refused_to_sign"])
+    if event_type in {
+        "clinical.signature_updated",
+        "operational.signature_updated",
+    }:
+        return _compact_detail_text(
+            payload,
+            ["signer_name", "signer_role", "signature_role", "refused_to_sign"],
+        )
 
     if event_type == "clinical.procedure_updated":
         return _compact_detail_text(payload, ["procedure", "procedure_name", "body_site", "successful", "notes"])
@@ -562,7 +571,12 @@ def _timeline_item(row: ServiceDispatchEventV2, timezone_name: str) -> dict[str,
 
 
 def _signature_sort_key(role: str) -> int:
-    order = {"operator": 1, "receiver": 2, "patient": 3}
+    order = {
+        "event_responsible": 1,
+        "operator": 2,
+        "receiver": 3,
+        "patient": 4,
+    }
     return order.get(str(role or "").lower(), 99)
 
 
@@ -698,17 +712,29 @@ def _build_verification_block(
 
     qr_text = verification_url or f"FRAP|{intake_id}|{short_hash}"
 
-    legal_legend = (
-        "Este documento constituye un registro electrónico de atención médica prehospitalaria y forma parte del expediente operativo del servicio. "
-        "La información contenida refleja los datos capturados durante la atención y las firmas registradas en el sistema. "
-        "El presente documento no sustituye, por sí mismo, mecanismos de firma electrónica avanzada o certificación externa conforme a la legislación aplicable, "
-        "pero puede ser utilizado como elemento de soporte documental, operativo y administrativo."
-    )
+    if case_type == "standby_operational":
+        legal_legend = (
+            "Este documento constituye un registro electrónico de la operación de una guardia, cobertura o evento de ambulancia. "
+            "La información contenida refleja los datos operativos registrados durante el servicio y la firma del responsable o autoridad del evento. "
+            "No constituye un registro de atención clínica ni acredita por sí mismo la prestación de atención médica a un paciente."
+        )
 
-    control_text = (
-        "Este documento corresponde a un registro electrónico de atención prehospitalaria generado por el sistema FRAP. "
-        "Para efectos de control y trazabilidad, cuenta con identificador único y código de verificación que permiten validar su integridad dentro del sistema."
-    )
+        control_text = (
+            "Esta constancia corresponde a un registro electrónico operativo generado por el sistema FRAP V2. "
+            "Para efectos de control y trazabilidad, cuenta con identificador único y código de verificación que permiten validar su integridad dentro del sistema."
+        )
+    else:
+        legal_legend = (
+            "Este documento constituye un registro electrónico de atención médica prehospitalaria y forma parte del expediente operativo del servicio. "
+            "La información contenida refleja los datos capturados durante la atención y las firmas registradas en el sistema. "
+            "El presente documento no sustituye, por sí mismo, mecanismos de firma electrónica avanzada o certificación externa conforme a la legislación aplicable, "
+            "pero puede ser utilizado como elemento de soporte documental, operativo y administrativo."
+        )
+
+        control_text = (
+            "Este documento corresponde a un registro electrónico de atención prehospitalaria generado por el sistema FRAP. "
+            "Para efectos de control y trazabilidad, cuenta con identificador único y código de verificación que permiten validar su integridad dentro del sistema."
+        )
 
     return {
         "title": "VERIFICACIÓN Y CONTROL DOCUMENTAL",
