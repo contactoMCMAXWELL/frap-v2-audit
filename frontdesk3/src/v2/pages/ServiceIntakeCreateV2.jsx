@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { localInputToIso } from "../../utils/datetime";
+import {
+  formatDeviceDateTime,
+  localInputToIso,
+} from "../../utils/datetime";
 import { v2Api } from "../api/v2";
 
 const emptyLocation = (role, sequence = 1) => ({
@@ -148,13 +151,86 @@ export default function ServiceIntakeCreateV2({ session }) {
 
         const rows = normalizeList(data);
 
-        const standbys = rows.filter(
-          (item) =>
-            String(item?.operation_mode || "")
-              .trim()
-              .toLowerCase() === "standby" &&
-            item?.active !== false
-        );
+        const referenceTime =
+          isRetrospective && form.occurred_at
+            ? new Date(form.occurred_at).getTime()
+            : Date.now();
+
+        const standbys = rows
+          .filter((item) => {
+            const isStandby =
+              String(item?.operation_mode || "")
+                .trim()
+                .toLowerCase() === "standby";
+
+            if (!isStandby || item?.active === false) {
+              return false;
+            }
+
+            if (
+              isRetrospective &&
+              !form.occurred_at
+            ) {
+              return true;
+            }
+
+            const startsAt = item?.standby_starts_at
+              ? new Date(item.standby_starts_at).getTime()
+              : null;
+
+            const endsAt = item?.standby_ends_at
+              ? new Date(item.standby_ends_at).getTime()
+              : null;
+
+            if (
+              startsAt !== null &&
+              Number.isNaN(startsAt)
+            ) {
+              return true;
+            }
+
+            if (
+              endsAt !== null &&
+              Number.isNaN(endsAt)
+            ) {
+              return true;
+            }
+
+            if (
+              startsAt !== null &&
+              referenceTime < startsAt
+            ) {
+              return false;
+            }
+
+            if (
+              endsAt !== null &&
+              referenceTime > endsAt
+            ) {
+              return false;
+            }
+
+            return true;
+          })
+          .sort((a, b) => {
+            const aStart = new Date(
+              a?.standby_starts_at || 0
+            ).getTime();
+
+            const bStart = new Date(
+              b?.standby_starts_at || 0
+            ).getTime();
+
+            const safeA = Number.isNaN(aStart)
+              ? Number.MAX_SAFE_INTEGER
+              : aStart;
+
+            const safeB = Number.isNaN(bStart)
+              ? Number.MAX_SAFE_INTEGER
+              : bStart;
+
+            return safeA - safeB;
+          });
 
         setStandbyParents(standbys);
       } catch {
@@ -177,6 +253,8 @@ export default function ServiceIntakeCreateV2({ session }) {
     session?.token,
     session?.companyId,
     session?.userId,
+    isRetrospective,
+    form.occurred_at,
   ]);
 
   const onChange = (key, value) => {
@@ -615,9 +693,25 @@ export default function ServiceIntakeCreateV2({ session }) {
                       key={item.id}
                       value={item.id}
                     >
-                      {item.standby_event_name ||
+                      {(item.standby_event_name ||
                         item.service_type ||
-                        "Guardia"}
+                        "Guardia") +
+                        " · " +
+                        formatDeviceDateTime(
+                          item.standby_starts_at,
+                          {
+                            withSeconds: false,
+                            fallback: "inicio no definido",
+                          }
+                        ) +
+                        " → " +
+                        formatDeviceDateTime(
+                          item.standby_ends_at,
+                          {
+                            withSeconds: false,
+                            fallback: "fin no definido",
+                          }
+                        )}
                     </option>
                   ))}
                 </select>
