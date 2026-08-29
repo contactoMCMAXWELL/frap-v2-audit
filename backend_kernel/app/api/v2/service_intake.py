@@ -11,12 +11,14 @@ from app.api.deps import get_company_id, get_current_user, get_db
 from app.models.service import Service
 from app.models.service_dispatch_event_v2 import ServiceDispatchEventV2
 from app.models.service_intake_v2 import ServiceIntakeV2
+from app.models.service_location_v2 import ServiceLocationV2
 from app.models.unit import Unit
 from app.schemas.v2.service_intake import (
     ServiceIntakeV2Create,
     ServiceIntakeV2Out,
     ServiceIntakeV2Update,
 )
+from app.schemas.v2.service_location import ServiceLocationV2Create
 from app.services.company_license_service import CompanyLicenseService
 from app.services.retrospective_guard import (
     RETROSPECTIVE_CAPTURE_MODE,
@@ -24,6 +26,16 @@ from app.services.retrospective_guard import (
     require_retrospective_write_access,
     validate_capture_mode,
     validate_semantic_timestamp,
+)
+from app.services.service_operation_v2 import (
+    evaluate_coverage,
+    legacy_location_values,
+    normalize_operation_mode,
+    primary_location,
+    resolve_billing_scope,
+    validate_locations,
+    validate_parent_standby,
+    validate_standby_fields,
 )
 
 router = APIRouter(prefix="/v2/service-intake", tags=["v2-service-intake"])
@@ -128,6 +140,91 @@ def _dispatch_preview_events(events: list[ServiceDispatchEventV2]) -> list[Servi
     if operative:
         return operative[-3:]
     return events[-3:]
+
+
+def _location_dict(row: ServiceLocationV2) -> dict:
+    return {
+        "id": row.id,
+        "company_id": row.company_id,
+        "intake_id": row.intake_id,
+        "location_role": row.location_role,
+        "place_type": row.place_type,
+        "name": row.name,
+        "address_text": row.address_text,
+        "reference": row.reference,
+        "lat": row.lat,
+        "lng": row.lng,
+        "sequence": row.sequence,
+        "active": row.active,
+        "created_at": row.created_at,
+        "updated_at": row.updated_at,
+    }
+
+
+def _intake_out_dict(
+    row: ServiceIntakeV2,
+    locations: list[ServiceLocationV2] | None = None,
+) -> dict:
+    return {
+        "id": row.id,
+        "company_id": row.company_id,
+        "service_id": row.service_id,
+        "incident_number": row.incident_number,
+        "service_type": row.service_type,
+        "service_subtype": row.service_subtype,
+        "priority_operational": row.priority_operational,
+        "priority_clinical": row.priority_clinical,
+        "call_source": row.call_source,
+        "caller_name": row.caller_name,
+        "caller_phone": row.caller_phone,
+        "location_text": row.location_text,
+        "location_reference": row.location_reference,
+        "lat": row.lat,
+        "lng": row.lng,
+        "patient_count_estimated": row.patient_count_estimated,
+        "scene_risk": row.scene_risk,
+        "destination_suggested": row.destination_suggested,
+        "payer_type": row.payer_type,
+        "notes": row.notes,
+        "extra_json": row.extra_json,
+        "active": row.active,
+        "capture_mode": row.capture_mode,
+        "occurred_at": row.occurred_at,
+        "retrospective_reason": row.retrospective_reason,
+        "retrospective_started_by_user_id": row.retrospective_started_by_user_id,
+        "retrospective_started_at": row.retrospective_started_at,
+        "approved_by_user_id": row.approved_by_user_id,
+        "approved_at": row.approved_at,
+        "operation_mode": row.operation_mode,
+        "parent_intake_id": row.parent_intake_id,
+        "standby_event_name": row.standby_event_name,
+        "standby_starts_at": row.standby_starts_at,
+        "standby_ends_at": row.standby_ends_at,
+        "standby_billing_mode": row.standby_billing_mode,
+        "coverage_status": row.coverage_status,
+        "billing_scope": row.billing_scope,
+        "coverage_evaluated_at": row.coverage_evaluated_at,
+        "locations": [_location_dict(item) for item in (locations or [])],
+    }
+
+
+def _locations_for_intake(
+    db: Session,
+    company_id: uuid.UUID,
+    intake_id: uuid.UUID,
+) -> list[ServiceLocationV2]:
+    return (
+        db.query(ServiceLocationV2)
+        .filter(
+            ServiceLocationV2.company_id == company_id,
+            ServiceLocationV2.intake_id == intake_id,
+        )
+        .order_by(
+            ServiceLocationV2.sequence.asc(),
+            ServiceLocationV2.created_at.asc(),
+        )
+        .all()
+    )
 
 
 def _serialize_board_row(
@@ -270,13 +367,45 @@ def list_service_intakes(
     user=Depends(get_current_user),
     company_id: uuid.UUID = Depends(get_company_id),
 ):
-    return (
+    rows = (
         db.query(ServiceIntakeV2)
         .filter(ServiceIntakeV2.company_id == company_id)
         .order_by(ServiceIntakeV2.created_at.desc())
         .limit(200)
         .all()
     )
+
+    if not rows:
+        return []
+
+    intake_ids = [row.id for row in rows]
+
+    location_rows = (
+        db.query(ServiceLocationV2)
+        .filter(
+            ServiceLocationV2.company_id == company_id,
+            ServiceLocationV2.intake_id.in_(intake_ids),
+        )
+        .order_by(
+            ServiceLocationV2.intake_id.asc(),
+            ServiceLocationV2.sequence.asc(),
+            ServiceLocationV2.created_at.asc(),
+        )
+        .all()
+    )
+
+    locations_by_intake: dict[uuid.UUID, list[ServiceLocationV2]] = {}
+
+    for location in location_rows:
+        locations_by_intake.setdefault(location.intake_id, []).append(location)
+
+    return [
+        _intake_out_dict(
+            row,
+            locations_by_intake.get(row.id, []),
+        )
+        for row in rows
+    ]
 
 
 @router.get("/{intake_id}", response_model=ServiceIntakeV2Out)
@@ -288,14 +417,20 @@ def get_service_intake(
 ):
     row = (
         db.query(ServiceIntakeV2)
-        .filter(ServiceIntakeV2.id == intake_id, ServiceIntakeV2.company_id == company_id)
+        .filter(
+            ServiceIntakeV2.id == intake_id,
+            ServiceIntakeV2.company_id == company_id,
+        )
         .first()
     )
 
     if not row:
         raise HTTPException(status_code=404, detail="Service intake not found")
 
-    return row
+    return _intake_out_dict(
+        row,
+        _locations_for_intake(db, company_id, row.id),
+    )
 
 
 @router.post("/", response_model=ServiceIntakeV2Out, status_code=201)
@@ -329,24 +464,170 @@ def create_service_intake(
     ):
         raise HTTPException(
             status_code=422,
-            detail=(
-                "retrospective_reason sólo aplica "
-                "a captura retrospectiva"
-            ),
+            detail="retrospective_reason sólo aplica a captura retrospectiva",
         )
 
     if payload.service_id:
         svc = (
             db.query(Service)
-            .filter(Service.id == payload.service_id, Service.company_id == company_id)
+            .filter(
+                Service.id == payload.service_id,
+                Service.company_id == company_id,
+            )
             .first()
         )
 
         if not svc:
             raise HTTPException(status_code=404, detail="Linked service not found")
 
-    data = payload.model_dump()
+    operation_mode = normalize_operation_mode(payload.operation_mode)
+
+    requested_locations = list(payload.locations or [])
+
+    # Compatibilidad con clientes/frontend anteriores a ubicaciones estructuradas.
+    # Un servicio scene legacy se convierte internamente en una ubicación scene.
+    if operation_mode == "scene" and not requested_locations:
+        legacy_lat = None
+        legacy_lng = None
+
+        try:
+            if payload.lat not in (None, ""):
+                legacy_lat = float(payload.lat)
+
+            if payload.lng not in (None, ""):
+                legacy_lng = float(payload.lng)
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=422,
+                detail="Las coordenadas legacy no tienen un formato válido",
+            )
+
+        requested_locations = [
+            ServiceLocationV2Create(
+                location_role="scene",
+                name=str(payload.location_text or "").strip(),
+                address_text=str(payload.location_text or "").strip(),
+                reference=str(payload.location_reference or "").strip(),
+                lat=legacy_lat,
+                lng=legacy_lng,
+                sequence=1,
+                active=True,
+            )
+        ]
+
+    locations = validate_locations(
+        operation_mode=operation_mode,
+        locations=requested_locations,
+    )
+
+    standby_billing_mode = validate_standby_fields(
+        operation_mode=operation_mode,
+        standby_event_name=payload.standby_event_name,
+        standby_starts_at=payload.standby_starts_at,
+        standby_ends_at=payload.standby_ends_at,
+        standby_billing_mode=payload.standby_billing_mode,
+    )
+
+    parent = None
+
+    if payload.parent_intake_id is not None:
+        parent = (
+            db.query(ServiceIntakeV2)
+            .filter(
+                ServiceIntakeV2.id == payload.parent_intake_id,
+                ServiceIntakeV2.company_id == company_id,
+            )
+            .first()
+        )
+
+        if not parent:
+            raise HTTPException(
+                status_code=404,
+                detail="Guardia padre no encontrada",
+            )
+
+    validate_parent_standby(
+        parent=parent,
+        operation_mode=operation_mode,
+    )
+
+    if parent is None and payload.parent_intake_id is not None:
+        raise HTTPException(
+            status_code=404,
+            detail="Guardia padre no encontrada",
+        )
+
+    billing_scope = resolve_billing_scope(
+        parent=parent,
+        requested_scope=payload.billing_scope,
+    )
+
+    event_time = (
+        payload.occurred_at
+        if capture_mode == RETROSPECTIVE_CAPTURE_MODE
+        else datetime.now(timezone.utc)
+    )
+
+    coverage_status, coverage_evaluated_at = evaluate_coverage(
+        parent=parent,
+        event_time=event_time,
+    )
+
+    main_location = primary_location(
+        operation_mode=operation_mode,
+        locations=locations,
+    )
+
+    (
+        legacy_location_text,
+        legacy_location_reference,
+        legacy_lat,
+        legacy_lng,
+    ) = legacy_location_values(main_location)
+
+    data = payload.model_dump(
+        exclude={
+            "locations",
+            "operation_mode",
+            "parent_intake_id",
+            "standby_event_name",
+            "standby_starts_at",
+            "standby_ends_at",
+            "standby_billing_mode",
+            "billing_scope",
+        }
+    )
+
     data["capture_mode"] = capture_mode
+    data["operation_mode"] = operation_mode
+    data["parent_intake_id"] = payload.parent_intake_id
+
+    data["standby_event_name"] = (
+        str(payload.standby_event_name or "").strip()
+        if operation_mode == "standby"
+        else None
+    )
+    data["standby_starts_at"] = (
+        payload.standby_starts_at
+        if operation_mode == "standby"
+        else None
+    )
+    data["standby_ends_at"] = (
+        payload.standby_ends_at
+        if operation_mode == "standby"
+        else None
+    )
+    data["standby_billing_mode"] = standby_billing_mode
+
+    data["coverage_status"] = coverage_status
+    data["billing_scope"] = billing_scope
+    data["coverage_evaluated_at"] = coverage_evaluated_at
+
+    # Mantener compatibilidad con Board/mapa/PDF legacy.
+    data["location_text"] = legacy_location_text
+    data["location_reference"] = legacy_location_reference
+    data["lat"] = legacy_lat
+    data["lng"] = legacy_lng
 
     if capture_mode == RETROSPECTIVE_CAPTURE_MODE:
         data["retrospective_started_by_user_id"] = getattr(user, "id", None)
@@ -358,8 +639,27 @@ def create_service_intake(
     )
 
     db.add(row)
-    db.commit()
-    db.refresh(row)
+    db.flush()
+
+    location_models: list[ServiceLocationV2] = []
+
+    for location in locations:
+        location_model = ServiceLocationV2(
+            company_id=company_id,
+            intake_id=row.id,
+            location_role=location.location_role,
+            place_type=location.place_type,
+            name=str(location.name or "").strip(),
+            address_text=str(location.address_text or "").strip(),
+            reference=str(location.reference or "").strip(),
+            lat=location.lat,
+            lng=location.lng,
+            sequence=location.sequence,
+            active=location.active,
+        )
+
+        db.add(location_model)
+        location_models.append(location_model)
 
     created_event = ServiceDispatchEventV2(
         company_id=company_id,
@@ -369,13 +669,31 @@ def create_service_intake(
         event_type="service_created",
         status_label=DISPATCH_EVENT_LABELS["service_created"],
         notes=(row.notes or "").strip(),
-        event_payload={},
+        event_payload={
+            "operation_mode": operation_mode,
+            "parent_intake_id": (
+                str(row.parent_intake_id)
+                if row.parent_intake_id
+                else None
+            ),
+            "coverage_status": coverage_status,
+            "billing_scope": billing_scope,
+        },
         occurred_at=row.occurred_at,
     )
-    db.add(created_event)
-    db.commit()
 
-    return row
+    db.add(created_event)
+
+    db.commit()
+    db.refresh(row)
+
+    location_models = _locations_for_intake(
+        db,
+        company_id,
+        row.id,
+    )
+
+    return _intake_out_dict(row, location_models)
 
 
 @router.post(
@@ -409,7 +727,10 @@ def approve_retrospective_service_intake(
         )
 
     if row.approved_at is not None or row.approved_by_user_id is not None:
-        return row
+        return _intake_out_dict(
+            row,
+            _locations_for_intake(db, company_id, row.id),
+        )
 
     user_id = getattr(user, "id", None)
     if user_id is None:
@@ -425,7 +746,10 @@ def approve_retrospective_service_intake(
     db.commit()
     db.refresh(row)
 
-    return row
+    return _intake_out_dict(
+        row,
+        _locations_for_intake(db, company_id, row.id),
+    )
 
 
 @router.patch("/{intake_id}", response_model=ServiceIntakeV2Out)
@@ -438,7 +762,10 @@ def update_service_intake(
 ):
     row = (
         db.query(ServiceIntakeV2)
-        .filter(ServiceIntakeV2.id == intake_id, ServiceIntakeV2.company_id == company_id)
+        .filter(
+            ServiceIntakeV2.id == intake_id,
+            ServiceIntakeV2.company_id == company_id,
+        )
         .first()
     )
 
@@ -446,6 +773,27 @@ def update_service_intake(
         raise HTTPException(status_code=404, detail="Service intake not found")
 
     changes = payload.model_dump(exclude_unset=True)
+
+    protected_operation_fields = {
+        "standby_event_name",
+        "standby_starts_at",
+        "standby_ends_at",
+        "standby_billing_mode",
+        "billing_scope",
+    }
+
+    attempted_protected = sorted(
+        protected_operation_fields.intersection(changes.keys())
+    )
+
+    if attempted_protected:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Estos campos operativos requieren un flujo de edición dedicado: "
+                + ", ".join(attempted_protected)
+            ),
+        )
 
     require_retrospective_write_access(row, user)
 
@@ -478,7 +826,10 @@ def update_service_intake(
             field_name="occurred_at",
         )
 
-    if "retrospective_reason" in changes and not row.capture_mode == RETROSPECTIVE_CAPTURE_MODE:
+    if (
+        "retrospective_reason" in changes
+        and row.capture_mode != RETROSPECTIVE_CAPTURE_MODE
+    ):
         raise HTTPException(
             status_code=422,
             detail="retrospective_reason sólo aplica a captura retrospectiva",
@@ -487,7 +838,10 @@ def update_service_intake(
     if "service_id" in changes and changes["service_id"]:
         svc = (
             db.query(Service)
-            .filter(Service.id == changes["service_id"], Service.company_id == company_id)
+            .filter(
+                Service.id == changes["service_id"],
+                Service.company_id == company_id,
+            )
             .first()
         )
 
@@ -501,4 +855,7 @@ def update_service_intake(
     db.commit()
     db.refresh(row)
 
-    return row
+    return _intake_out_dict(
+        row,
+        _locations_for_intake(db, company_id, row.id),
+    )

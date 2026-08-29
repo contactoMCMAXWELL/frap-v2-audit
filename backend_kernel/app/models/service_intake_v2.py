@@ -51,6 +51,54 @@ class ServiceIntakeV2(Base):
     destination_suggested: Mapped[str] = mapped_column(String(120), nullable=False, default="")
     payer_type: Mapped[str] = mapped_column(String(50), nullable=False, default="private")
 
+    # Modalidad operativa y relación guardia/evento
+    operation_mode: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="scene",
+        server_default="scene",
+        index=True,
+    )
+
+    parent_intake_id = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("service_intake_v2.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    # Contexto de guardia / cobertura
+    standby_event_name: Mapped[str | None] = mapped_column(
+        String(180),
+        nullable=True,
+    )
+    standby_starts_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    standby_ends_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    standby_billing_mode: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+    )
+
+    # Clasificación comercial/temporal de eventos hijos
+    coverage_status: Mapped[str | None] = mapped_column(
+        String(30),
+        nullable=True,
+    )
+    billing_scope: Mapped[str | None] = mapped_column(
+        String(30),
+        nullable=True,
+    )
+    coverage_evaluated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
     extra_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
