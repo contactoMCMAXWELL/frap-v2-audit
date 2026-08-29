@@ -45,6 +45,7 @@ PAYER_TYPE_LABELS = {
     "government": "Gobierno",
     "public": "Público",
     "agreement": "Convenio",
+    "contract": "Convenio",
     "other": "Otro",
 }
 
@@ -118,6 +119,26 @@ def _fmt_money(value: float) -> str:
 
 def _fmt_pct(value: float) -> str:
     return f"{value:,.2f}%"
+
+
+def _dashboard_financial_values(intake, fin) -> tuple[float, float, float]:
+    if not fin:
+        return 0.0, 0.0, 0.0
+
+    cost = _to_float(fin.total_cost)
+
+    billing_scope = str(
+        getattr(intake, "billing_scope", "") or ""
+    ).strip().lower()
+
+    if billing_scope == "included_in_standby":
+        sale = 0.0
+    else:
+        sale = _to_float(fin.sale_price)
+
+    margin = sale - cost
+
+    return sale, cost, margin
 
 
 def ensure_admin_access(user) -> None:
@@ -277,14 +298,18 @@ def get_summary(db: Session, company_id: UUID, start_date: date | None, end_date
 
         fin = ctx.financial_by_intake.get(intake.id)
         if fin:
-            sale_price += _to_float(fin.sale_price)
-            total_cost += _to_float(fin.total_cost)
-            margin_amount += _to_float(fin.margin_amount)
+            sale, cost, computed_margin = _dashboard_financial_values(
+                intake,
+                fin,
+            )
+            sale_price += sale
+            total_cost += cost
+            margin_amount += computed_margin
             status = str(getattr(fin, "billing_status", "") or "").lower()
             if status == "paid":
-                paid += _to_float(fin.sale_price)
+                paid += sale
             else:
-                pending += _to_float(fin.sale_price)
+                pending += sale
 
     margin_pct = (margin_amount / sale_price * 100) if sale_price > 0 else 0.0
     kpis = [
@@ -324,8 +349,12 @@ def get_operations(db: Session, company_id: UUID, start_date: date | None, end_d
         units[unit_label]["count"] += 1
         fin = ctx.financial_by_intake.get(intake.id)
         if fin:
-            units[unit_label]["amount"] += _to_float(fin.sale_price)
-            units[unit_label]["extra"] += _to_float(fin.margin_amount)
+            sale, _, computed_margin = _dashboard_financial_values(
+                intake,
+                fin,
+            )
+            units[unit_label]["amount"] += sale
+            units[unit_label]["extra"] += computed_margin
 
         handoff = ctx.handoff_by_intake.get(intake.id)
         destination = ""
@@ -335,7 +364,11 @@ def get_operations(db: Session, company_id: UUID, start_date: date | None, end_d
             destination = str(getattr(intake, "destination_suggested", "") or "Sin destino").strip() or "Sin destino"
         destinations[destination]["count"] += 1
         if fin:
-            destinations[destination]["amount"] += _to_float(fin.sale_price)
+            sale, _, _ = _dashboard_financial_values(
+                intake,
+                fin,
+            )
+            destinations[destination]["amount"] += sale
 
     return {
         "start_date": ctx.start_date.isoformat(),
@@ -411,6 +444,7 @@ def get_financial(db: Session, company_id: UUID, start_date: date | None, end_da
     total_sale = 0.0
     total_cost = 0.0
     margin = 0.0
+    revenue_service_count = 0
     by_status = defaultdict(lambda: {"count": 0, "amount": 0.0, "extra": 0.0})
     by_payer = defaultdict(lambda: {"count": 0, "amount": 0.0, "extra": 0.0})
     by_service = defaultdict(lambda: {"count": 0, "amount": 0.0, "extra": 0.0})
@@ -420,12 +454,15 @@ def get_financial(db: Session, company_id: UUID, start_date: date | None, end_da
         fin = ctx.financial_by_intake.get(intake.id)
         if not fin:
             continue
-        sale = _to_float(fin.sale_price)
-        cost = _to_float(fin.total_cost)
-        margin_amount = _to_float(fin.margin_amount)
+        sale, cost, margin_amount = _dashboard_financial_values(
+            intake,
+            fin,
+        )
         total_sale += sale
         total_cost += cost
         margin += margin_amount
+        if sale > 0:
+            revenue_service_count += 1
 
         status = _translate_billing_status(str(getattr(fin, "billing_status", "") or "Sin estatus").strip() or "Sin estatus")
         payer = _translate_payer_type(str(getattr(fin, "payer_type", "") or getattr(intake, "payer_type", "") or "Sin pagador").strip() or "Sin pagador")
@@ -442,7 +479,7 @@ def get_financial(db: Session, company_id: UUID, start_date: date | None, end_da
         {"key": "sale_price", "label": "Valor vendido", "value": round(total_sale, 2), "formatted": _fmt_money(total_sale), "tone": "default", "hint": "Precio de venta acumulado"},
         {"key": "total_cost", "label": "Costo total", "value": round(total_cost, 2), "formatted": _fmt_money(total_cost), "tone": "default", "hint": "Costo real acumulado"},
         {"key": "margin", "label": "Margen total", "value": round(margin, 2), "formatted": _fmt_money(margin), "tone": "ok" if margin >= 0 else "warn", "hint": _fmt_pct(margin_pct)},
-        {"key": "avg_ticket", "label": "Ticket promedio", "value": round(total_sale / len(ctx.financial_by_intake), 2) if ctx.financial_by_intake else 0, "formatted": _fmt_money(total_sale / len(ctx.financial_by_intake)) if ctx.financial_by_intake else _fmt_money(0), "tone": "default", "hint": "Promedio por servicio con registro financiero"},
+        {"key": "avg_ticket", "label": "Ticket promedio", "value": round(total_sale / revenue_service_count, 2) if revenue_service_count else 0, "formatted": _fmt_money(total_sale / revenue_service_count) if revenue_service_count else _fmt_money(0), "tone": "default", "hint": "Promedio por servicio con ingreso computable"},
     ]
     return {
         "start_date": ctx.start_date.isoformat(),
@@ -481,9 +518,13 @@ def get_timeseries(db: Session, company_id: UUID, start_date: date | None, end_d
             row["ready_for_pdf"] += 1
         fin = ctx.financial_by_intake.get(intake.id)
         if fin:
-            row["sale_price"] += _to_float(fin.sale_price)
-            row["total_cost"] += _to_float(fin.total_cost)
-            row["margin_amount"] += _to_float(fin.margin_amount)
+            sale, cost, computed_margin = _dashboard_financial_values(
+                intake,
+                fin,
+            )
+            row["sale_price"] += sale
+            row["total_cost"] += cost
+            row["margin_amount"] += computed_margin
             status = str(getattr(fin, "billing_status", "") or "").lower()
             if status == "billed":
                 row["billed"] += 1
