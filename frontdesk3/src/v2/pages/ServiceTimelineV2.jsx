@@ -97,6 +97,44 @@ function detailItemsOf(evt) {
   return [];
 }
 
+function operationModeLabel(mode) {
+  if (mode === "transfer") return "Traslado";
+  if (mode === "standby") return "Guardia / cobertura";
+  return "Atención en sitio";
+}
+
+function captureModeLabel(mode) {
+  return mode === "retrospective"
+    ? "Retrospectiva"
+    : "Tiempo real";
+}
+
+function coverageLabel(value) {
+  if (value === "within_coverage") return "Dentro de cobertura";
+  if (value === "outside_coverage") return "Fuera de cobertura";
+  return "No aplica";
+}
+
+function billingScopeLabel(value) {
+  if (value === "included_in_standby") return "Incluido en guardia";
+  if (value === "additional_charge") return "Cargo adicional";
+  return "No aplica";
+}
+
+function standbyBillingLabel(value) {
+  if (value === "included") return "Incluida";
+  if (value === "additional") return "Cargo adicional";
+  if (value === "mixed") return "Mixta";
+  return "No especificada";
+}
+
+function locationRoleLabel(role) {
+  if (role === "origin") return "Origen";
+  if (role === "destination") return "Destino";
+  if (role === "standby") return "Ubicación de guardia";
+  return "Ubicación de atención";
+}
+
 const SECTION_PALETTE = {
   "detalle-servicio": {
     bg: "#f7fbff",
@@ -351,6 +389,71 @@ export default function ServiceTimelineV2({ session }) {
     [currentUnitCode, intake]
   );
 
+  const structuredLocations = useMemo(() => {
+    const rows = Array.isArray(intake?.locations)
+      ? intake.locations.filter((row) => row?.active !== false)
+      : [];
+
+    if (rows.length) {
+      return [...rows].sort(
+        (a, b) =>
+          Number(a?.sequence || 0) - Number(b?.sequence || 0)
+      );
+    }
+
+    if (
+      intake?.location_text ||
+      intake?.location_reference ||
+      intake?.lat ||
+      intake?.lng
+    ) {
+      return [
+        {
+          id: "legacy-location",
+          location_role:
+            intake?.operation_mode === "standby"
+              ? "standby"
+              : intake?.operation_mode === "transfer"
+              ? "origin"
+              : "scene",
+          name: intake?.location_text || "",
+          address_text: intake?.location_text || "",
+          reference: intake?.location_reference || "",
+          lat: intake?.lat,
+          lng: intake?.lng,
+          sequence: 1,
+          active: true,
+          legacy: true,
+        },
+      ];
+    }
+
+    return [];
+  }, [intake]);
+
+  const mapPoints = useMemo(
+    () =>
+      structuredLocations
+        .filter(
+          (row) =>
+            row?.lat !== null &&
+            row?.lat !== undefined &&
+            row?.lng !== null &&
+            row?.lng !== undefined
+        )
+        .map((row, index) => ({
+          id: row?.id || `${row?.location_role || "location"}-${index}`,
+          lat: row.lat,
+          lng: row.lng,
+          role: row?.location_role || "",
+          label:
+            row?.name ||
+            row?.address_text ||
+            locationRoleLabel(row?.location_role),
+        })),
+    [structuredLocations]
+  );
+
   const allExpanded = Object.values(sectionState).every(Boolean);
 
   function scrollToTop() {
@@ -569,26 +672,153 @@ export default function ServiceTimelineV2({ session }) {
           expanded={sectionState["detalle-servicio"]}
           onToggle={(open) => updateSection("detalle-servicio", open)}
           title="Detalle del servicio"
-          description="Datos generales, prioridad operativa y contexto del incidente."
+          description="Datos generales, modalidad operativa, relación comercial y ubicaciones del servicio."
         >
           <div style={cardStyle}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-              <div style={{ display: "grid", gap: 6 }}>
-                <h3 style={{ marginTop: 0, marginBottom: 6 }}>{intake.service_type || "Servicio"}</h3>
-                <div><strong>Subtipo:</strong> {intake.service_subtype || "No especificado"}</div>
-                <div><strong>Ubicación:</strong> {intake.location_text || "No especificada"}</div>
-                <div><strong>Referencia:</strong> {intake.location_reference || "Sin referencia"}</div>
-                <div><strong>Solicitante:</strong> {intake.caller_name || "No especificado"}</div>
-                <div><strong>Teléfono:</strong> {intake.caller_phone || "No especificado"}</div>
-                <div><strong>Hospital sugerido:</strong> {intake.destination_suggested || "No especificado"}</div>
-                <div><strong>Prioridad operativa:</strong> {intake.priority_operational ?? "-"}</div>
-                <div><strong>Prioridad clínica:</strong> {intake.priority_clinical || "-"}</div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 16,
+                flexWrap: "wrap",
+              }}
+            >
+              <div style={{ display: "grid", gap: 8, flex: "1 1 520px" }}>
+                <h3 style={{ marginTop: 0, marginBottom: 4 }}>
+                  {intake.service_type || "Servicio"}
+                </h3>
+
+                <div style={grid2}>
+                  <div><strong>Subtipo:</strong> {intake.service_subtype || "No especificado"}</div>
+                  <div><strong>Modalidad operativa:</strong> {operationModeLabel(intake.operation_mode)}</div>
+                  <div><strong>Tipo de captura:</strong> {captureModeLabel(intake.capture_mode)}</div>
+                  <div>
+                    <strong>Fecha y hora del servicio:</strong>{" "}
+                    {intake.occurred_at
+                      ? formatDeviceDateTime(intake.occurred_at)
+                      : intake.created_at
+                      ? formatDeviceDateTime(intake.created_at)
+                      : "No especificada"}
+                  </div>
+                  <div><strong>Prioridad operativa:</strong> {intake.priority_operational ?? "-"}</div>
+                  <div><strong>Prioridad clínica:</strong> {intake.priority_clinical || "-"}</div>
+                  <div><strong>Origen de llamada:</strong> {intake.call_source || "No especificado"}</div>
+                  <div><strong>Pacientes estimados:</strong> {intake.patient_count_estimated ?? "No especificado"}</div>
+                  <div><strong>Solicitante:</strong> {intake.caller_name || "No especificado"}</div>
+                  <div><strong>Teléfono:</strong> {intake.caller_phone || "No especificado"}</div>
+                  <div><strong>Riesgo en escena:</strong> {intake.scene_risk || "No especificado"}</div>
+                  <div><strong>Hospital sugerido:</strong> {intake.destination_suggested || "No especificado"}</div>
+                  <div><strong>Pagador:</strong> {intake.payer_type || "No especificado"}</div>
+                </div>
+
+                {intake.operation_mode === "standby" && (
+                  <div style={detailContextStyle}>
+                    <strong>Datos de la guardia / cobertura</strong>
+                    <div><strong>Evento:</strong> {intake.standby_event_name || "Sin nombre"}</div>
+                    <div>
+                      <strong>Inicio:</strong>{" "}
+                      {intake.standby_starts_at
+                        ? formatDeviceDateTime(intake.standby_starts_at)
+                        : "No especificado"}
+                    </div>
+                    <div>
+                      <strong>Fin:</strong>{" "}
+                      {intake.standby_ends_at
+                        ? formatDeviceDateTime(intake.standby_ends_at)
+                        : "No especificado"}
+                    </div>
+                    <div>
+                      <strong>Modalidad comercial:</strong>{" "}
+                      {standbyBillingLabel(intake.standby_billing_mode)}
+                    </div>
+                  </div>
+                )}
+
+                {intake.parent_intake_id && (
+                  <div style={detailContextStyle}>
+                    <strong>Relación con guardia</strong>
+                    <div><strong>Folio padre:</strong> {intake.parent_intake_id}</div>
+                    <div><strong>Cobertura:</strong> {coverageLabel(intake.coverage_status)}</div>
+                    <div><strong>Tratamiento comercial:</strong> {billingScopeLabel(intake.billing_scope)}</div>
+                  </div>
+                )}
+
+                <div style={{ display: "grid", gap: 10 }}>
+                  <strong>Ubicaciones operativas</strong>
+
+                  {structuredLocations.length ? (
+                    structuredLocations.map((location) => (
+                      <div
+                        key={
+                          location?.id ||
+                          `${location?.location_role}-${location?.sequence}`
+                        }
+                        style={locationDetailStyle}
+                      >
+                        <div>
+                          <strong>{locationRoleLabel(location?.location_role)}</strong>
+                        </div>
+
+                        {!!location?.name && (
+                          <div><strong>Nombre:</strong> {location.name}</div>
+                        )}
+
+                        <div>
+                          <strong>Dirección:</strong>{" "}
+                          {location?.address_text ||
+                            location?.name ||
+                            "No especificada"}
+                        </div>
+
+                        <div>
+                          <strong>Referencia:</strong>{" "}
+                          {location?.reference || "Sin referencia"}
+                        </div>
+
+                        {location?.lat !== null &&
+                          location?.lat !== undefined &&
+                          location?.lng !== null &&
+                          location?.lng !== undefined && (
+                            <div>
+                              <strong>Coordenadas:</strong>{" "}
+                              {location.lat}, {location.lng}
+                            </div>
+                          )}
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ color: "#6b7280" }}>
+                      Sin ubicación registrada.
+                    </div>
+                  )}
+                </div>
+
+                {!!intake.notes && (
+                  <div style={detailContextStyle}>
+                    <strong>Notas del servicio</strong>
+                    <div style={{ whiteSpace: "pre-wrap" }}>
+                      {intake.notes}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
-                <Link to="/v2/intakes"><button type="button">Volver a servicios</button></Link>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 12,
+                  flexWrap: "wrap",
+                  alignItems: "flex-start",
+                }}
+              >
+                <Link to="/v2/intakes">
+                  <button type="button">Volver a servicios</button>
+                </Link>
+
                 {caps.dispatch.operate && (
-                  <Link to="/v2/intakes/nuevo"><button type="button">Nuevo servicio</button></Link>
+                  <Link to="/v2/intakes/nuevo">
+                    <button type="button">Nuevo servicio</button>
+                  </Link>
                 )}
               </div>
             </div>
@@ -601,11 +831,18 @@ export default function ServiceTimelineV2({ session }) {
           id="mapa-incidente"
           expanded={sectionState["mapa-incidente"]}
           onToggle={(open) => updateSection("mapa-incidente", open)}
-          title="Mapa de incidente"
-          description="Referencia visual rápida de la ubicación del servicio."
+          title="Mapa operativo"
+          description="Referencia visual de las ubicaciones operativas registradas para el servicio."
         >
           <MapCardV2
-            title="Mapa del incidente"
+            title={
+              intake.operation_mode === "transfer"
+                ? "Origen y destino del traslado"
+                : intake.operation_mode === "standby"
+                ? "Ubicación de la guardia"
+                : "Ubicación de la atención"
+            }
+            points={mapPoints}
             lat={intake.lat}
             lng={intake.lng}
             label={intake.location_text || "Servicio"}
@@ -958,6 +1195,24 @@ const cardStyle = {
   border: "1px solid #e5e7eb",
   borderRadius: 12,
   padding: 18,
+};
+
+const detailContextStyle = {
+  background: "#f9fafb",
+  border: "1px solid #d1d5db",
+  borderRadius: 10,
+  padding: 12,
+  display: "grid",
+  gap: 6,
+};
+
+const locationDetailStyle = {
+  background: "#ffffff",
+  border: "1px solid #e5e7eb",
+  borderRadius: 10,
+  padding: 12,
+  display: "grid",
+  gap: 5,
 };
 
 const groupSectionStyle = {
