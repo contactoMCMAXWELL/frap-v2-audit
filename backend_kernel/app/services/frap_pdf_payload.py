@@ -27,6 +27,7 @@ from app.models.frap_vital_sign_v2 import FrapVitalSignV2
 from app.models.service import Service
 from app.models.service_dispatch_event_v2 import ServiceDispatchEventV2
 from app.models.service_intake_v2 import ServiceIntakeV2
+from app.models.service_location_v2 import ServiceLocationV2
 from app.models.unit import Unit
 from app.services.frap_case_resolution import validate_case_signatures
 
@@ -786,10 +787,62 @@ def build_frap_pdf_payload(db: Session, company_id: UUID, intake_id: UUID) -> di
     service_data = _clean_dict(_row_to_dict(intake))
     service_data["created_at_display"] = _local_dt_str(service_data.get("created_at"), timezone_name)
     service_data["updated_at_display"] = _local_dt_str(service_data.get("updated_at"), timezone_name)
+    service_data["standby_starts_at_display"] = _local_dt_str(
+        service_data.get("standby_starts_at"),
+        timezone_name,
+    )
+    service_data["standby_ends_at_display"] = _local_dt_str(
+        service_data.get("standby_ends_at"),
+        timezone_name,
+    )
     if service:
         service_data["service_record"] = _clean_dict(_row_to_dict(service))
     if unit:
         service_data["unit"] = _clean_dict(_row_to_dict(unit))
+
+    location_rows = (
+        db.query(ServiceLocationV2)
+        .filter(
+            ServiceLocationV2.company_id == company_id,
+            ServiceLocationV2.intake_id == intake_id,
+            ServiceLocationV2.active.is_(True),
+        )
+        .order_by(
+            ServiceLocationV2.sequence.asc(),
+            ServiceLocationV2.created_at.asc(),
+        )
+        .all()
+    )
+
+    service_data["locations"] = [
+        _clean_dict(_row_to_dict(row) or {})
+        for row in location_rows
+    ]
+
+    parent_context = None
+    if intake.parent_intake_id:
+        parent = (
+            db.query(ServiceIntakeV2)
+            .filter(
+                ServiceIntakeV2.company_id == company_id,
+                ServiceIntakeV2.id == intake.parent_intake_id,
+            )
+            .first()
+        )
+
+        if parent:
+            parent_context = _clean_dict(_row_to_dict(parent))
+            parent_context["standby_starts_at_display"] = _local_dt_str(
+                parent_context.get("standby_starts_at"),
+                timezone_name,
+            )
+            parent_context["standby_ends_at_display"] = _local_dt_str(
+                parent_context.get("standby_ends_at"),
+                timezone_name,
+            )
+
+    if parent_context:
+        service_data["parent_context"] = parent_context
 
     patient = {}
     if clinical_record:

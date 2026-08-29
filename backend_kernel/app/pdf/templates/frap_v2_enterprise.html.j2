@@ -375,6 +375,15 @@
         <td class="card"><table class="meta-table">
           <tr><td class="meta-label">Tipo de servicio</td><td class="meta-value">{{ payload.service.service_type|display or "N/D" }}</td></tr>
           <tr><td class="meta-label">Subtipo</td><td class="meta-value">{{ payload.service.service_subtype|display or "N/D" }}</td></tr>
+          <tr>
+            <td class="meta-label">Modalidad operativa</td>
+            <td class="meta-value">
+              {% if payload.service.operation_mode == "transfer" %}Traslado
+              {% elif payload.service.operation_mode == "standby" %}Guardia / cobertura
+              {% elif payload.service.operation_mode == "scene" %}Atención en sitio
+              {% else %}N/D{% endif %}
+            </td>
+          </tr>
           <tr><td class="meta-label">Prioridad operativa</td><td class="meta-value">{{ payload.service.priority_operational|display or "N/D" }}</td></tr>
           <tr><td class="meta-label">Prioridad clínica</td><td class="meta-value">{{ payload.service.priority_clinical|display or "N/D" }}</td></tr>
           <tr><td class="meta-label">Ubicación</td><td class="meta-value">{{ payload.service.location_text|display or "N/D" }}</td></tr>
@@ -396,6 +405,112 @@
         </table></td>
       </tr></table>
     </div>
+
+    {% if payload.service.operation_mode in ["transfer", "standby", "scene"] %}
+    <div class="section">
+      <div class="section-title">Detalle operativo del servicio</div>
+      <div class="card">
+        <table class="meta-table">
+          {% if payload.service.operation_mode == "transfer" %}
+            {% for location in payload.service.locations %}
+              {% if location.location_role == "origin" %}
+              <tr><td class="meta-label">Origen operativo</td><td class="meta-value">{{ location.name|display or "N/D" }}</td></tr>
+              <tr><td class="meta-label">Dirección de origen</td><td class="meta-value">{{ location.address_text|display or "N/D" }}</td></tr>
+              {% if location.reference %}
+              <tr><td class="meta-label">Referencia de origen</td><td class="meta-value">{{ location.reference|display }}</td></tr>
+              {% endif %}
+              {% endif %}
+            {% endfor %}
+
+            {% for location in payload.service.locations %}
+              {% if location.location_role == "destination" %}
+              <tr><td class="meta-label">Destino operativo</td><td class="meta-value">{{ location.name|display or "N/D" }}</td></tr>
+              <tr><td class="meta-label">Dirección de destino</td><td class="meta-value">{{ location.address_text|display or "N/D" }}</td></tr>
+              {% if location.reference %}
+              <tr><td class="meta-label">Referencia de destino</td><td class="meta-value">{{ location.reference|display }}</td></tr>
+              {% endif %}
+              {% endif %}
+            {% endfor %}
+          {% elif payload.service.operation_mode == "standby" %}
+              <tr><td class="meta-label">Nombre de cobertura</td><td class="meta-value">{{ payload.service.standby_event_name|display or "N/D" }}</td></tr>
+              <tr><td class="meta-label">Inicio de cobertura</td><td class="meta-value">{{ payload.service.standby_starts_at_display or "N/D" }}</td></tr>
+              <tr><td class="meta-label">Fin de cobertura</td><td class="meta-value">{{ payload.service.standby_ends_at_display or "N/D" }}</td></tr>
+              <tr>
+                <td class="meta-label">Modalidad comercial</td>
+                <td class="meta-value">
+                  {% if payload.service.standby_billing_mode == "included" %}Incluida
+                  {% elif payload.service.standby_billing_mode == "additional" %}Cargo adicional
+                  {% elif payload.service.standby_billing_mode == "mixed" %}Mixta
+                  {% else %}N/D{% endif %}
+                </td>
+              </tr>
+
+              {% for location in payload.service.locations %}
+                {% if location.location_role == "standby" %}
+                <tr><td class="meta-label">Sede de cobertura</td><td class="meta-value">{{ location.name|display or "N/D" }}</td></tr>
+                <tr><td class="meta-label">Dirección de cobertura</td><td class="meta-value">{{ location.address_text|display or "N/D" }}</td></tr>
+                {% if location.reference %}
+                <tr><td class="meta-label">Referencia</td><td class="meta-value">{{ location.reference|display }}</td></tr>
+                {% endif %}
+                {% endif %}
+              {% endfor %}
+          {% else %}
+              {% for location in payload.service.locations %}
+                {% if location.location_role == "scene" %}
+                <tr><td class="meta-label">Ubicación operativa</td><td class="meta-value">{{ location.name|display or payload.service.location_text|display or "N/D" }}</td></tr>
+                <tr><td class="meta-label">Dirección</td><td class="meta-value">{{ location.address_text|display or payload.service.location_text|display or "N/D" }}</td></tr>
+                {% if location.reference %}
+                <tr><td class="meta-label">Referencia</td><td class="meta-value">{{ location.reference|display }}</td></tr>
+                {% endif %}
+                {% endif %}
+              {% endfor %}
+          {% endif %}
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if payload.service.parent_context %}
+    <div class="section">
+      <div class="section-title">Contexto operativo y de cobertura</div>
+      <div class="card">
+        <table class="meta-table">
+          <tr>
+            <td class="meta-label">Guardia relacionada</td>
+            <td class="meta-value">{{ payload.service.parent_context.standby_event_name|display or "N/D" }}</td>
+          </tr>
+          <tr>
+            <td class="meta-label">Folio del servicio padre</td>
+            <td class="meta-value">{{ payload.service.parent_context.id }}</td>
+          </tr>
+          <tr>
+            <td class="meta-label">Inicio de cobertura</td>
+            <td class="meta-value">{{ payload.service.parent_context.standby_starts_at_display or "N/D" }}</td>
+          </tr>
+          <tr>
+            <td class="meta-label">Fin de cobertura</td>
+            <td class="meta-value">{{ payload.service.parent_context.standby_ends_at_display or "N/D" }}</td>
+          </tr>
+          <tr>
+            <td class="meta-label">Estado de cobertura</td>
+            <td class="meta-value">
+              {% if payload.service.coverage_status == "within_coverage" %}Dentro de cobertura
+              {% elif payload.service.coverage_status == "outside_coverage" %}Fuera de cobertura
+              {% else %}N/D{% endif %}
+            </td>
+          </tr>
+          <tr>
+            <td class="meta-label">Tratamiento comercial</td>
+            <td class="meta-value">
+              {% if payload.service.billing_scope == "included_in_standby" %}Incluido en la guardia
+              {% elif payload.service.billing_scope == "additional_charge" %}Cargo adicional
+              {% else %}N/D{% endif %}
+            </td>
+          </tr>
+        </table>
+      </div>
+    </div>
+    {% endif %}
 
     <div class="section">
       <div class="section-title">Datos del paciente</div>
