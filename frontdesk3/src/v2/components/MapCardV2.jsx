@@ -8,6 +8,8 @@ import {
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import {
+  geocodeAddress,
+  googleMapsAddressUrl,
   googleMapsUrl,
   hasCoordinates,
   toFloat,
@@ -37,42 +39,110 @@ function FitPoints({ points }) {
   return null;
 }
 
+function normalizeRawPoints({ points, lat, lng, label, address }) {
+  if (Array.isArray(points) && points.length) {
+    return points.map((point, index) => ({
+      id: point?.id || `${index}-${point?.lat}-${point?.lng}`,
+      lat: point?.lat,
+      lng: point?.lng,
+      label: point?.label || `Ubicación ${index + 1}`,
+      role: point?.role || "",
+      address: String(
+        point?.address ||
+          point?.address_text ||
+          ""
+      ).trim(),
+    }));
+  }
+
+  return [
+    {
+      id: "single",
+      lat,
+      lng,
+      label,
+      role: "",
+      address: String(address || "").trim(),
+    },
+  ];
+}
+
 export default function MapCardV2({
   title = "Ubicación del servicio",
   lat,
   lng,
   label = "Servicio",
+  address = "",
   points,
 }) {
-  const normalizedPoints = React.useMemo(() => {
-    if (Array.isArray(points) && points.length) {
-      return points
-        .filter((point) => hasCoordinates(point?.lat, point?.lng))
-        .map((point, index) => ({
-          id: point?.id || `${index}-${point?.lat}-${point?.lng}`,
-          lat: toFloat(point.lat),
-          lng: toFloat(point.lng),
-          label: point?.label || `Ubicación ${index + 1}`,
-          role: point?.role || "",
-        }));
+  const rawPoints = React.useMemo(
+    () => normalizeRawPoints({ points, lat, lng, label, address }),
+    [points, lat, lng, label, address]
+  );
+
+  const [resolvedPoints, setResolvedPoints] = React.useState([]);
+  const [resolving, setResolving] = React.useState(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    async function resolvePoints() {
+      setResolving(true);
+
+      const next = [];
+
+      for (const point of rawPoints) {
+        if (hasCoordinates(point.lat, point.lng)) {
+          next.push({
+            ...point,
+            lat: toFloat(point.lat),
+            lng: toFloat(point.lng),
+            source: "stored",
+          });
+          continue;
+        }
+
+        if (point.address) {
+          const result = await geocodeAddress(point.address);
+
+          if (result) {
+            next.push({
+              ...point,
+              lat: result.lat,
+              lng: result.lng,
+              source: "geocoded",
+              geocodedDisplayName: result.displayName,
+            });
+            continue;
+          }
+        }
+
+        next.push({
+          ...point,
+          lat: null,
+          lng: null,
+          source: "unresolved",
+        });
+      }
+
+      if (!cancelled) {
+        setResolvedPoints(next);
+        setResolving(false);
+      }
     }
 
-    if (hasCoordinates(lat, lng)) {
-      return [
-        {
-          id: "single",
-          lat: toFloat(lat),
-          lng: toFloat(lng),
-          label,
-          role: "",
-        },
-      ];
-    }
+    resolvePoints();
 
-    return [];
-  }, [points, lat, lng, label]);
+    return () => {
+      cancelled = true;
+    };
+  }, [rawPoints]);
 
-  if (!normalizedPoints.length) {
+  const mappablePoints = resolvedPoints.filter((point) =>
+    hasCoordinates(point.lat, point.lng)
+  );
+
+  if (!mappablePoints.length) {
     return (
       <div
         style={{
@@ -83,14 +153,50 @@ export default function MapCardV2({
         }}
       >
         <h3 style={{ marginTop: 0 }}>{title}</h3>
-        <p style={{ marginBottom: 0, color: "#6b7280" }}>
-          Este registro aún no tiene coordenadas geográficas.
-        </p>
+
+        {resolving ? (
+          <p style={{ marginBottom: 0, color: "#6b7280" }}>
+            Buscando ubicación a partir de la dirección...
+          </p>
+        ) : (
+          <>
+            <p style={{ color: "#6b7280" }}>
+              No fue posible obtener coordenadas para esta ubicación.
+            </p>
+
+            {resolvedPoints
+              .filter((point) => point.address)
+              .map((point) => (
+                <div
+                  key={point.id}
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                  }}
+                >
+                  <span>{point.address}</span>
+
+                  <a
+                    href={googleMapsAddressUrl(point.address)}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ textDecoration: "none" }}
+                  >
+                    <button type="button">
+                      Buscar dirección en Google Maps
+                    </button>
+                  </a>
+                </div>
+              ))}
+          </>
+        )}
       </div>
     );
   }
 
-  const firstPoint = normalizedPoints[0];
+  const firstPoint = mappablePoints[0];
 
   return (
     <div
@@ -113,7 +219,13 @@ export default function MapCardV2({
       >
         <h3 style={{ margin: 0 }}>{title}</h3>
 
-        {normalizedPoints.length === 1 && (
+        {resolving && (
+          <div style={{ color: "#6b7280", fontSize: 13 }}>
+            Resolviendo direcciones...
+          </div>
+        )}
+
+        {mappablePoints.length === 1 && (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <a
               href={googleMapsUrl(
@@ -140,7 +252,7 @@ export default function MapCardV2({
         )}
       </div>
 
-      {normalizedPoints.length > 1 && (
+      {resolvedPoints.length > 1 && (
         <div
           style={{
             display: "grid",
@@ -148,7 +260,7 @@ export default function MapCardV2({
             marginBottom: 12,
           }}
         >
-          {normalizedPoints.map((point) => (
+          {resolvedPoints.map((point) => (
             <div
               key={point.id}
               style={{
@@ -159,28 +271,53 @@ export default function MapCardV2({
                 alignItems: "center",
               }}
             >
-              <div>
+              <div style={{ display: "grid", gap: 2 }}>
                 <strong>{point.label}</strong>
+
+                {!!point.address && (
+                  <span style={{ color: "#6b7280", fontSize: 13 }}>
+                    {point.address}
+                  </span>
+                )}
               </div>
 
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <a
-                  href={googleMapsUrl(point.lat, point.lng, point.label)}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{ textDecoration: "none" }}
-                >
-                  <button type="button">Google Maps</button>
-                </a>
+                {hasCoordinates(point.lat, point.lng) ? (
+                  <>
+                    <a
+                      href={googleMapsUrl(
+                        point.lat,
+                        point.lng,
+                        point.label
+                      )}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ textDecoration: "none" }}
+                    >
+                      <button type="button">Google Maps</button>
+                    </a>
 
-                <a
-                  href={wazeUrl(point.lat, point.lng)}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{ textDecoration: "none" }}
-                >
-                  <button type="button">Waze</button>
-                </a>
+                    <a
+                      href={wazeUrl(point.lat, point.lng)}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ textDecoration: "none" }}
+                    >
+                      <button type="button">Waze</button>
+                    </a>
+                  </>
+                ) : point.address ? (
+                  <a
+                    href={googleMapsAddressUrl(point.address)}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ textDecoration: "none" }}
+                  >
+                    <button type="button">
+                      Buscar en Google Maps
+                    </button>
+                  </a>
+                ) : null}
               </div>
             </div>
           ))}
@@ -199,14 +336,22 @@ export default function MapCardV2({
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
 
-          <FitPoints points={normalizedPoints} />
+          <FitPoints points={mappablePoints} />
 
-          {normalizedPoints.map((point) => (
+          {mappablePoints.map((point) => (
             <Marker
               key={point.id}
               position={[point.lat, point.lng]}
             >
-              <Popup>{point.label}</Popup>
+              <Popup>
+                <div style={{ display: "grid", gap: 4 }}>
+                  <strong>{point.label}</strong>
+                  {!!point.address && <span>{point.address}</span>}
+                  {point.source === "geocoded" && (
+                    <span>Ubicación obtenida a partir de la dirección</span>
+                  )}
+                </div>
+              </Popup>
             </Marker>
           ))}
         </MapContainer>
@@ -221,9 +366,12 @@ export default function MapCardV2({
           color: "#6b7280",
         }}
       >
-        {normalizedPoints.map((point) => (
+        {mappablePoints.map((point) => (
           <div key={`coords-${point.id}`}>
             {point.label}: {point.lat} | {point.lng}
+            {point.source === "geocoded"
+              ? " · obtenidas desde dirección"
+              : ""}
           </div>
         ))}
       </div>

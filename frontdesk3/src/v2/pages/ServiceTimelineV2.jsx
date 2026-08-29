@@ -434,18 +434,12 @@ export default function ServiceTimelineV2({ session }) {
   const mapPoints = useMemo(
     () =>
       structuredLocations
-        .filter(
-          (row) =>
-            row?.lat !== null &&
-            row?.lat !== undefined &&
-            row?.lng !== null &&
-            row?.lng !== undefined
-        )
         .map((row, index) => ({
           id: row?.id || `${row?.location_role || "location"}-${index}`,
           lat: row.lat,
           lng: row.lng,
           role: row?.location_role || "",
+          address: row?.address_text || "",
           label:
             row?.name ||
             row?.address_text ||

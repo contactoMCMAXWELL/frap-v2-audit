@@ -5,6 +5,7 @@ import {
   localInputToIso,
 } from "../../utils/datetime";
 import { v2Api } from "../api/v2";
+import { geocodeAddress } from "../utils/maps";
 
 const emptyLocation = (role, sequence = 1) => ({
   location_role: role,
@@ -1081,6 +1082,48 @@ function LocationSection({
   const geoLoading =
     geoLoadingKey === geoKey;
 
+  const [addressLoading, setAddressLoading] = useState(false);
+  const [addressMessage, setAddressMessage] = useState("");
+
+  const locateAddress = async () => {
+    const address = String(location?.address_text || "").trim();
+
+    if (!address) {
+      setAddressMessage("Captura una dirección antes de ubicarla.");
+      return;
+    }
+
+    try {
+      setAddressLoading(true);
+      setAddressMessage("");
+
+      const result = await geocodeAddress(address);
+
+      if (!result) {
+        setAddressMessage(
+          "No fue posible ubicar esta dirección. Puedes guardar el servicio o usar coordenadas manuales."
+        );
+        return;
+      }
+
+      setLocation((prev) => ({
+        ...prev,
+        lat: String(result.lat),
+        lng: String(result.lng),
+      }));
+
+      setAddressMessage(
+        "Dirección ubicada. Latitud y longitud actualizadas."
+      );
+    } catch {
+      setAddressMessage(
+        "No fue posible ubicar esta dirección. Puedes guardar el servicio o usar coordenadas manuales."
+      );
+    } finally {
+      setAddressLoading(false);
+    }
+  };
+
   return (
     <section style={sectionStyle}>
       <h3>{title}</h3>
@@ -1184,10 +1227,17 @@ function LocationSection({
         </label>
       </div>
 
-      <div>
+      <div
+        style={{
+          display: "flex",
+          gap: 10,
+          flexWrap: "wrap",
+          alignItems: "center",
+        }}
+      >
         <button
           type="button"
-          disabled={geoLoading}
+          disabled={geoLoading || addressLoading}
           onClick={() =>
             onUseMyLocation(
               geoKey,
@@ -1199,7 +1249,34 @@ function LocationSection({
             ? "Obteniendo ubicación..."
             : "Usar mi ubicación"}
         </button>
+
+        <button
+          type="button"
+          disabled={
+            geoLoading ||
+            addressLoading ||
+            !String(location?.address_text || "").trim()
+          }
+          onClick={locateAddress}
+        >
+          {addressLoading
+            ? "Ubicando dirección..."
+            : "Ubicar dirección"}
+        </button>
       </div>
+
+      {!!addressMessage && (
+        <div
+          style={{
+            ...helperText,
+            color: addressMessage.startsWith("Dirección ubicada")
+              ? "#047857"
+              : "#92400e",
+          }}
+        >
+          {addressMessage}
+        </div>
+      )}
     </section>
   );
 }
