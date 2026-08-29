@@ -397,6 +397,28 @@ export default function ServiceTimelineV2({ session }) {
       ? STANDBY_DISPATCH_ACTIONS
       : DISPATCH_ACTIONS;
 
+  const documentedDispatchEventTypes = useMemo(() => {
+    const types = new Set();
+
+    for (const evt of timeline?.events || []) {
+      const eventType = String(evt?.event_type || "").trim();
+      if (eventType) types.add(eventType);
+    }
+
+    return types;
+  }, [timeline]);
+
+  const isDispatchActionDocumented = (eventType) => {
+    if (eventType === "unit_assigned") {
+      return (
+        documentedDispatchEventTypes.has("unit_assigned") ||
+        documentedDispatchEventTypes.has("unit_reassigned")
+      );
+    }
+
+    return documentedDispatchEventTypes.has(eventType);
+  };
+
   const quickFacts = useMemo(
     () =>
       isStandbyOperational
@@ -929,7 +951,26 @@ export default function ServiceTimelineV2({ session }) {
                     </div>
 
                     <div style={{ display: "flex", alignItems: "end" }}>
-                      <button type="button" onClick={assignUnit} disabled={dispatchBusy}>
+                      <button
+                        type="button"
+                        onClick={assignUnit}
+                        disabled={dispatchBusy}
+                        style={
+                          isDispatchActionDocumented("unit_assigned")
+                            ? {
+                                background: "#dcfce7",
+                                color: "#166534",
+                                border: "1px solid #86efac",
+                                fontWeight: 700,
+                              }
+                            : undefined
+                        }
+                        title={
+                          isDispatchActionDocumented("unit_assigned")
+                            ? "Evento ya documentado"
+                            : "Registrar asignación de unidad"
+                        }
+                      >
                         {dispatchBusy ? "Guardando..." : currentUnitId ? "Reasignar unidad" : "Asignar unidad"}
                       </button>
                     </div>
@@ -947,16 +988,36 @@ export default function ServiceTimelineV2({ session }) {
                   </div>
 
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    {dispatchActions.map((action) => (
-                      <button
-                        key={action.event_type}
-                        type="button"
-                        disabled={dispatchBusy || !currentUnitId}
-                        onClick={() => createDispatchEvent(action.event_type, action.status_label)}
-                      >
-                        {action.status_label}
-                      </button>
-                    ))}
+                    {dispatchActions.map((action) => {
+                      const documented = isDispatchActionDocumented(action.event_type);
+
+                      return (
+                        <button
+                          key={action.event_type}
+                          type="button"
+                          disabled={dispatchBusy || !currentUnitId}
+                          onClick={() => createDispatchEvent(action.event_type, action.status_label)}
+                          style={
+                            documented
+                              ? {
+                                  background: "#dcfce7",
+                                  color: "#166534",
+                                  border: "1px solid #86efac",
+                                  fontWeight: 700,
+                                }
+                              : undefined
+                          }
+                          title={
+                            documented
+                              ? "Evento ya documentado"
+                              : "Registrar evento"
+                          }
+                        >
+                          {action.status_label}
+                          {documented ? " ✓" : ""}
+                        </button>
+                      );
+                    })}
                   </div>
 
                   {!currentUnitId && (
