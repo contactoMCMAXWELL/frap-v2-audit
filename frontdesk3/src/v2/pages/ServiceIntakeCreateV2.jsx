@@ -163,73 +163,26 @@ export default function ServiceIntakeCreateV2({ session }) {
                 .trim()
                 .toLowerCase() === "standby";
 
-            if (!isStandby || item?.active === false) {
-              return false;
-            }
-
-            if (
-              isRetrospective &&
-              !form.occurred_at
-            ) {
-              return true;
-            }
-
-            const startsAt = item?.standby_starts_at
-              ? new Date(item.standby_starts_at).getTime()
-              : null;
-
-            const endsAt = item?.standby_ends_at
-              ? new Date(item.standby_ends_at).getTime()
-              : null;
-
-            if (
-              startsAt !== null &&
-              Number.isNaN(startsAt)
-            ) {
-              return true;
-            }
-
-            if (
-              endsAt !== null &&
-              Number.isNaN(endsAt)
-            ) {
-              return true;
-            }
-
-            if (
-              startsAt !== null &&
-              referenceTime < startsAt
-            ) {
-              return false;
-            }
-
-            if (
-              endsAt !== null &&
-              referenceTime > endsAt
-            ) {
-              return false;
-            }
-
-            return true;
+            return isStandby && item?.active !== false;
           })
           .sort((a, b) => {
-            const aStart = new Date(
-              a?.standby_starts_at || 0
-            ).getTime();
+            const aStart = a?.standby_starts_at
+              ? new Date(a.standby_starts_at).getTime()
+              : Number.MAX_SAFE_INTEGER;
 
-            const bStart = new Date(
-              b?.standby_starts_at || 0
-            ).getTime();
+            const bStart = b?.standby_starts_at
+              ? new Date(b.standby_starts_at).getTime()
+              : Number.MAX_SAFE_INTEGER;
 
-            const safeA = Number.isNaN(aStart)
-              ? Number.MAX_SAFE_INTEGER
-              : aStart;
+            const aDistance = Number.isFinite(aStart)
+              ? Math.abs(aStart - referenceTime)
+              : Number.MAX_SAFE_INTEGER;
 
-            const safeB = Number.isNaN(bStart)
-              ? Number.MAX_SAFE_INTEGER
-              : bStart;
+            const bDistance = Number.isFinite(bStart)
+              ? Math.abs(bStart - referenceTime)
+              : Number.MAX_SAFE_INTEGER;
 
-            return safeA - safeB;
+            return aDistance - bDistance;
           });
 
         setStandbyParents(standbys);
@@ -539,10 +492,10 @@ export default function ServiceIntakeCreateV2({ session }) {
           form.parent_intake_id;
 
         if (
-          selectedParent?.standby_billing_mode === "mixed"
+          String(form.billing_scope || "").trim()
         ) {
           payload.billing_scope =
-            form.billing_scope;
+            String(form.billing_scope).trim();
         }
       }
 
