@@ -19,6 +19,8 @@ export default function ServiceFinancialsV2({ session }) {
 
   const [form, setForm] = useState(initialForm);
   const [supplies, setSupplies] = useState([]);
+  const [intake, setIntake] = useState(null);
+  const [parentIntake, setParentIntake] = useState(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -28,7 +30,7 @@ export default function ServiceFinancialsV2({ session }) {
       setLoading(true);
       setError("");
 
-      const [financialData, suppliesData] = await Promise.all([
+      const [financialData, suppliesData, intakeData] = await Promise.all([
         v2Api.serviceFinancialGet({
           intakeId,
           token: session?.token,
@@ -44,9 +46,29 @@ export default function ServiceFinancialsV2({ session }) {
           companyId: session?.companyId,
           userId: session?.userId,
         }).catch(() => []),
+        v2Api.serviceIntakeGet({
+          intakeId,
+          token: session?.token,
+          companyId: session?.companyId,
+          userId: session?.userId,
+        }),
       ]);
 
       setSupplies(Array.isArray(suppliesData) ? suppliesData : []);
+      setIntake(intakeData || null);
+
+      if (intakeData?.parent_intake_id) {
+        const parentData = await v2Api.serviceIntakeGet({
+          intakeId: intakeData.parent_intake_id,
+          token: session?.token,
+          companyId: session?.companyId,
+          userId: session?.userId,
+        }).catch(() => null);
+
+        setParentIntake(parentData);
+      } else {
+        setParentIntake(null);
+      }
 
       if (financialData) {
         setForm({
@@ -141,6 +163,71 @@ export default function ServiceFinancialsV2({ session }) {
   return (
     <div style={cardStyle}>
       <h3 style={{ marginTop: 0 }}>Costos y resultado económico</h3>
+
+      {intake?.operation_mode === "standby" && (
+        <div style={contextBoxStyle}>
+          <strong>Guardia / cobertura</strong>
+          <div><strong>Evento:</strong> {intake.standby_event_name || "Sin nombre"}</div>
+          <div>
+            <strong>Inicio:</strong>{" "}
+            {intake.standby_starts_at
+              ? new Date(intake.standby_starts_at).toLocaleString()
+              : "N/D"}
+          </div>
+          <div>
+            <strong>Fin:</strong>{" "}
+            {intake.standby_ends_at
+              ? new Date(intake.standby_ends_at).toLocaleString()
+              : "N/D"}
+          </div>
+          <div>
+            <strong>Modalidad comercial:</strong>{" "}
+            {intake.standby_billing_mode === "included"
+              ? "Incluida"
+              : intake.standby_billing_mode === "additional"
+              ? "Cargo adicional"
+              : intake.standby_billing_mode === "mixed"
+              ? "Mixta"
+              : "N/D"}
+          </div>
+        </div>
+      )}
+
+      {intake?.parent_intake_id && (
+        <div style={contextBoxStyle}>
+          <strong>Contexto operativo y comercial</strong>
+          <div>
+            <strong>Guardia relacionada:</strong>{" "}
+            {parentIntake?.standby_event_name || "N/D"}
+          </div>
+          <div><strong>Folio padre:</strong> {intake.parent_intake_id}</div>
+          <div>
+            <strong>Cobertura:</strong>{" "}
+            {intake.coverage_status === "within_coverage"
+              ? "Dentro de cobertura"
+              : intake.coverage_status === "outside_coverage"
+              ? "Fuera de cobertura"
+              : "N/D"}
+          </div>
+          <div>
+            <strong>Tratamiento comercial:</strong>{" "}
+            {intake.billing_scope === "included_in_standby"
+              ? "Incluido en la guardia"
+              : intake.billing_scope === "additional_charge"
+              ? "Cargo adicional"
+              : "N/D"}
+          </div>
+
+          {intake.billing_scope === "included_in_standby" && (
+            <div style={warningBoxStyle}>
+              Este servicio forma parte del precio de la guardia. Sus costos
+              deben registrarse para conocer la rentabilidad real, pero debe
+              evitarse contabilizarlo como un ingreso adicional si ya está
+              incluido en el servicio padre.
+            </div>
+          )}
+        </div>
+      )}
 
       <form onSubmit={onSubmit} style={{ display: "grid", gap: 10 }}>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
@@ -273,4 +360,21 @@ const summaryBoxStyle = {
   padding: 12,
   display: "grid",
   gap: 6,
+};
+
+const contextBoxStyle = {
+  background: "#f9fafb",
+  border: "1px solid #d1d5db",
+  borderRadius: 10,
+  padding: 12,
+  marginBottom: 14,
+  display: "grid",
+  gap: 6,
+};
+
+const warningBoxStyle = {
+  marginTop: 6,
+  padding: 10,
+  border: "1px solid #d1d5db",
+  borderRadius: 8,
 };
