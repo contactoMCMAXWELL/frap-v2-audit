@@ -27,6 +27,7 @@ from app.api.v2.procedure_catalog import router as procedure_catalog_router
 from app.api.v2.units_admin import router as units_admin_router
 from app.api.v2.frap_signatures import router as frap_signatures_router
 from app.api.v2.frap_pdf import router as frap_pdf_router
+from app.api.v2.event_participant_protection import router as event_participant_protection_router
 from app.api.v2 import licenses
 from app.api.v2.session import router as session_router
 
@@ -58,5 +59,6 @@ router.include_router(procedure_catalog_router)
 router.include_router(units_admin_router)
 router.include_router(frap_signatures_router)
 router.include_router(frap_pdf_router)
+router.include_router(event_participant_protection_router)
 router.include_router(licenses.router)
 router.include_router(session_router)
