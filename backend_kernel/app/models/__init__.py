@@ -22,3 +22,10 @@ from app.models.frap_body_map_v2 import FrapBodyMapV2
 from app.models.frap_cardio_v2 import FrapCardioV2
 from app.models.frap_pregnancy_v2 import FrapPregnancyV2
 from app.models.frap_signature_v2 import FrapSignatureV2
+from app.models.event_participant_protection import (
+    EventParticipantProtection,
+    EventParticipant,
+    EventParticipantEmergencyContact,
+    EventParticipantMedicalProfile,
+    EventParticipantConsent,
+)
