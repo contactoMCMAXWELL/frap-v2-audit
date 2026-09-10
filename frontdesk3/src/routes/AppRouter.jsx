@@ -16,6 +16,8 @@ import {
   ServiceIntakeListV2,
   ServiceIntakeCreateV2,
   ServiceTimelineV2,
+  EventParticipantProtectionConfig,
+  PublicEventParticipantLanding,
   V2AdminHome,
   V2AdminDashboardPage,
   V2AdminRolesPage,
@@ -77,6 +79,8 @@ export default function AppRouter() {
           path="/login"
           element={token ? <Navigate to={defaultPath} replace /> : <AuthPanel />}
         />
+
+        <Route path="/evento/:publicToken" element={<PublicEventParticipantLanding />} />
 
         <Route
           path="/dispatch"
@@ -156,6 +160,15 @@ export default function AppRouter() {
           <Route
             path="intakes/:intakeId/timeline"
             element={<ServiceTimelineV2 session={session} />}
+          />
+
+          <Route
+            path="intakes/:intakeId/proteccion-participantes"
+            element={
+              <RequireRole allowedRoles={["SUPERADMIN", "ADMIN", "DISPATCH"]}>
+                <EventParticipantProtectionConfig session={session} />
+              </RequireRole>
+            }
           />
 
           <Route
