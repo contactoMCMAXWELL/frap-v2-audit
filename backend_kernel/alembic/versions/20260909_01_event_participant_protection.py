@@ -33,17 +33,54 @@ def upgrade():
         sa.Column("gallery_json", postgresql.JSONB(), nullable=False),
         sa.Column("privacy_notice_version", sa.String(40), nullable=False),
         sa.Column("extra_json", postgresql.JSONB(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["company_id"], ["companies.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["intake_id"], ["service_intake_v2.id"], ondelete="CASCADE"),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.ForeignKeyConstraint(
+            ["company_id"],
+            ["companies.id"],
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["intake_id"],
+            ["service_intake_v2.id"],
+            ondelete="CASCADE",
+        ),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("company_id", "intake_id", name="uq_event_participant_protection_company_intake"),
-        sa.UniqueConstraint("public_token", name="uq_event_participant_protection_public_token"),
+        sa.UniqueConstraint(
+            "company_id",
+            "intake_id",
+            name="uq_event_participant_protection_company_intake",
+        ),
+        sa.UniqueConstraint(
+            "public_token",
+            name="uq_event_participant_protection_public_token",
+        ),
     )
-    op.create_index("ix_event_participant_protection_company_id", "event_participant_protection", ["company_id"])
-    op.create_index("ix_event_participant_protection_intake_id", "event_participant_protection", ["intake_id"])
-    op.create_index("ix_event_participant_protection_public_token", "event_participant_protection", ["public_token"])
+    op.create_index(
+        "ix_event_participant_protection_company_id",
+        "event_participant_protection",
+        ["company_id"],
+    )
+    op.create_index(
+        "ix_event_participant_protection_intake_id",
+        "event_participant_protection",
+        ["intake_id"],
+    )
+    op.create_index(
+        "ix_event_participant_protection_public_token",
+        "event_participant_protection",
+        ["public_token"],
+    )
 
     op.create_table(
         "event_participant",
@@ -51,8 +88,18 @@ def upgrade():
         sa.Column("company_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("protection_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("participant_token", sa.String(80), nullable=False),
-        sa.Column("status", sa.String(20), server_default="INICIADO", nullable=False),
-        sa.Column("source", sa.String(20), server_default="public", nullable=False),
+        sa.Column(
+            "status",
+            sa.String(20),
+            server_default="INICIADO",
+            nullable=False,
+        ),
+        sa.Column(
+            "source",
+            sa.String(20),
+            server_default="public",
+            nullable=False,
+        ),
         sa.Column("participant_number", sa.String(50), nullable=True),
         sa.Column("first_name", sa.String(100), nullable=False),
         sa.Column("paternal_surname", sa.String(100), nullable=False),
@@ -68,18 +115,63 @@ def upgrade():
         sa.Column("vehicle_number", sa.String(50), nullable=True),
         sa.Column("vehicle_make_model", sa.String(150), nullable=True),
         sa.Column("vehicle_color", sa.String(60), nullable=True),
-        sa.Column("preloaded", sa.Boolean(), server_default="false", nullable=False),
-        sa.Column("profile_completed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("last_participant_update_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["company_id"], ["companies.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["protection_id"], ["event_participant_protection.id"], ondelete="CASCADE"),
+        sa.Column(
+            "preloaded",
+            sa.Boolean(),
+            server_default="false",
+            nullable=False,
+        ),
+        sa.Column(
+            "profile_completed_at",
+            sa.DateTime(timezone=True),
+            nullable=True,
+        ),
+        sa.Column(
+            "last_participant_update_at",
+            sa.DateTime(timezone=True),
+            nullable=True,
+        ),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.ForeignKeyConstraint(
+            ["company_id"],
+            ["companies.id"],
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["protection_id"],
+            ["event_participant_protection.id"],
+            ondelete="CASCADE",
+        ),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("protection_id", "participant_token", name="uq_event_participant_token"),
+        sa.UniqueConstraint(
+            "protection_id",
+            "participant_token",
+            name="uq_event_participant_token",
+        ),
     )
-    for col in ("company_id", "protection_id", "participant_token", "status", "participant_number"):
-        op.create_index(f"ix_event_participant_{col}", "event_participant", [col])
+    for col in (
+        "company_id",
+        "protection_id",
+        "participant_token",
+        "status",
+        "participant_number",
+    ):
+        op.create_index(
+            f"ix_event_participant_{col}",
+            "event_participant",
+            [col],
+        )
 
     op.create_table(
         "event_participant_emergency_contact",
@@ -90,15 +182,46 @@ def upgrade():
         sa.Column("name", sa.String(180), nullable=False),
         sa.Column("relationship", sa.String(80), nullable=False),
         sa.Column("phone", sa.String(40), nullable=False),
-        sa.Column("present_at_event", sa.Boolean(), server_default="false", nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["company_id"], ["companies.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["participant_id"], ["event_participant.id"], ondelete="CASCADE"),
+        sa.Column(
+            "present_at_event",
+            sa.Boolean(),
+            server_default="false",
+            nullable=False,
+        ),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.ForeignKeyConstraint(
+            ["company_id"],
+            ["companies.id"],
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["participant_id"],
+            ["event_participant.id"],
+            ondelete="CASCADE",
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_event_participant_emergency_contact_company_id", "event_participant_emergency_contact", ["company_id"])
-    op.create_index("ix_event_participant_emergency_contact_participant_id", "event_participant_emergency_contact", ["participant_id"])
+    op.create_index(
+        "ix_event_participant_emergency_contact_company_id",
+        "event_participant_emergency_contact",
+        ["company_id"],
+    )
+    op.create_index(
+        "ix_event_participant_emergency_contact_participant_id",
+        "event_participant_emergency_contact",
+        ["participant_id"],
+    )
 
     op.create_table(
         "event_participant_medical_profile",
@@ -124,15 +247,44 @@ def upgrade():
         sa.Column("suit_cut_authorized", sa.Boolean(), nullable=True),
         sa.Column("protective_equipment_json", postgresql.JSONB(), nullable=False),
         sa.Column("declared_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["company_id"], ["companies.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["participant_id"], ["event_participant.id"], ondelete="CASCADE"),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.ForeignKeyConstraint(
+            ["company_id"],
+            ["companies.id"],
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["participant_id"],
+            ["event_participant.id"],
+            ondelete="CASCADE",
+        ),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("participant_id", name="uq_event_participant_medical_profile_participant"),
+        sa.UniqueConstraint(
+            "participant_id",
+            name="uq_event_participant_medical_profile_participant",
+        ),
     )
-    op.create_index("ix_event_participant_medical_profile_company_id", "event_participant_medical_profile", ["company_id"])
-    op.create_index("ix_event_participant_medical_profile_participant_id", "event_participant_medical_profile", ["participant_id"])
+    op.create_index(
+        "ix_event_participant_medical_profile_company_id",
+        "event_participant_medical_profile",
+        ["company_id"],
+    )
+    op.create_index(
+        "ix_event_participant_medical_profile_participant_id",
+        "event_participant_medical_profile",
+        ["participant_id"],
+    )
 
     op.create_table(
         "event_participant_consent",
@@ -145,16 +297,94 @@ def upgrade():
         sa.Column("information_confirmed", sa.Boolean(), nullable=False),
         sa.Column("accepted_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("audit_json", postgresql.JSONB(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["company_id"], ["companies.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["participant_id"], ["event_participant.id"], ondelete="CASCADE"),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.ForeignKeyConstraint(
+            ["company_id"],
+            ["companies.id"],
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["participant_id"],
+            ["event_participant.id"],
+            ondelete="CASCADE",
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_event_participant_consent_company_id", "event_participant_consent", ["company_id"])
-    op.create_index("ix_event_participant_consent_participant_id", "event_participant_consent", ["participant_id"])
+    op.create_index(
+        "ix_event_participant_consent_company_id",
+        "event_participant_consent",
+        ["company_id"],
+    )
+    op.create_index(
+        "ix_event_participant_consent_participant_id",
+        "event_participant_consent",
+        ["participant_id"],
+    )
+
+    op.create_table(
+        "event_participant_access_log",
+        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("company_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("participant_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("action", sa.String(60), nullable=False),
+        sa.Column("resource", sa.String(80), nullable=False),
+        sa.Column("reason", sa.String(250), nullable=True),
+        sa.Column("ip_address", sa.String(64), nullable=True),
+        sa.Column("user_agent", sa.String(500), nullable=True),
+        sa.Column("extra_json", postgresql.JSONB(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.ForeignKeyConstraint(
+            ["company_id"],
+            ["companies.id"],
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["participant_id"],
+            ["event_participant.id"],
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["user_id"],
+            ["users.id"],
+            ondelete="SET NULL",
+        ),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(
+        "ix_event_participant_access_log_company_id",
+        "event_participant_access_log",
+        ["company_id"],
+    )
+    op.create_index(
+        "ix_event_participant_access_log_participant_id",
+        "event_participant_access_log",
+        ["participant_id"],
+    )
+    op.create_index(
+        "ix_event_participant_access_log_user_id",
+        "event_participant_access_log",
+        ["user_id"],
+    )
+    op.create_index(
+        "ix_event_participant_access_log_action",
+        "event_participant_access_log",
+        ["action"],
+    )
 
 
 def downgrade():
+    op.execute("DROP TABLE IF EXISTS event_participant_access_log CASCADE")
     op.drop_table("event_participant_consent")
     op.drop_table("event_participant_medical_profile")
     op.drop_table("event_participant_emergency_contact")

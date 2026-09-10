@@ -11,6 +11,7 @@ from app.models.audit_log import AuditLog  # noqa
 
 from app.models.company_license import CompanyLicense
 from app.models.company_pdf_config import CompanyPdfConfig
+from app.models.company_privacy_notice import CompanyPrivacyNotice
 from app.models.service_intake_v2 import ServiceIntakeV2
 from app.models.service_location_v2 import ServiceLocationV2
 from app.models.service_dispatch_event_v2 import ServiceDispatchEventV2

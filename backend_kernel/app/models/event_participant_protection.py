@@ -75,6 +75,7 @@ class EventParticipant(Base):
     vehicle_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     vehicle_make_model: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
     vehicle_color: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
+    vehicle_plates: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
 
     preloaded: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     profile_completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -115,6 +116,7 @@ class EventParticipantMedicalProfile(Base):
     conditions_json: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     conditions_detail: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     medications_json: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    uses_anticoagulants: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     surgeries_json: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     recent_injury_detail: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     implants_json: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
@@ -144,4 +146,38 @@ class EventParticipantConsent(Base):
     information_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False)
     accepted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     audit_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at = created_at_col()
+
+
+class EventParticipantAccessLog(Base):
+    """Auditoría inmutable de accesos a información del participante."""
+
+    __tablename__ = "event_participant_access_log"
+
+    id = uuid_pk()
+
+    company_id = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    participant_id = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("event_participant.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    action: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    resource: Mapped[str] = mapped_column(String(80), nullable=False, default="participant")
+    reason: Mapped[Optional[str]] = mapped_column(String(250), nullable=True)
+    ip_address: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    user_agent: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    extra_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     created_at = created_at_col()

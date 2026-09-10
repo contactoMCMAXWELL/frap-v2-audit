@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.api.v2.company_licenses import router as company_licenses_router
 from app.api.v2.company_pdf_config import router as company_pdf_config_router
+from app.api.v2.company_privacy_notice import router as company_privacy_notice_router
 from app.api.v2.service_intake import router as service_intake_router
 from app.api.v2.service_dispatch_events import router as service_dispatch_events_router
 from app.api.v2.timeline import router as timeline_router
@@ -28,12 +29,14 @@ from app.api.v2.units_admin import router as units_admin_router
 from app.api.v2.frap_signatures import router as frap_signatures_router
 from app.api.v2.frap_pdf import router as frap_pdf_router
 from app.api.v2.event_participant_protection import router as event_participant_protection_router
+from app.api.v2.event_media import router as event_media_router
 from app.api.v2 import licenses
 from app.api.v2.session import router as session_router
 
 router = APIRouter()
 router.include_router(company_licenses_router)
 router.include_router(company_pdf_config_router)
+router.include_router(company_privacy_notice_router)
 router.include_router(service_intake_router)
 router.include_router(service_dispatch_events_router)
 router.include_router(timeline_router)
@@ -60,5 +63,6 @@ router.include_router(units_admin_router)
 router.include_router(frap_signatures_router)
 router.include_router(frap_pdf_router)
 router.include_router(event_participant_protection_router)
+router.include_router(event_media_router)
 router.include_router(licenses.router)
 router.include_router(session_router)
