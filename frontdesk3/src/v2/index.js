@@ -5,6 +5,8 @@ export { default as CompanyLicenses } from "./pages/CompanyLicenses";
 export { default as ServiceIntakeListV2 } from "./pages/ServiceIntakeListV2";
 export { default as ServiceIntakeCreateV2 } from "./pages/ServiceIntakeCreateV2";
 export { default as ServiceTimelineV2 } from "./pages/ServiceTimelineV2";
+export { default as EventParticipantProtectionConfig } from "./pages/EventParticipantProtectionConfig";
+export { default as PublicEventParticipantLanding } from "./pages/PublicEventParticipantLanding";
 export { default as ServiceSuppliesV2 } from "./pages/ServiceSuppliesV2";
 export { default as ServiceFinancialsV2 } from "./pages/ServiceFinancialsV2";
 export { default as FrapClinicalV2 } from "./pages/FrapClinicalV2";
@@ -28,3 +30,4 @@ export { default as V2AdminSuppliesPage } from "./pages/V2AdminSuppliesPage";
 
 export { v2Api } from "./api/v2";
 export { v2AdminApi } from "./api/admin";
+export { participantProtectionApi } from "./api/participantProtection";
