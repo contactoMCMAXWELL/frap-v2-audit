@@ -6,6 +6,7 @@ export { default as ServiceIntakeListV2 } from "./pages/ServiceIntakeListV2";
 export { default as ServiceIntakeCreateV2 } from "./pages/ServiceIntakeCreateV2";
 export { default as ServiceTimelineV2 } from "./pages/ServiceTimelineV2";
 export { default as EventParticipantProtectionConfig } from "./pages/EventParticipantProtectionConfig";
+export { default as EventParticipantProtectionList } from "./pages/EventParticipantProtectionList";
 export { default as PublicEventParticipantLanding } from "./pages/PublicEventParticipantLanding";
 export { default as PublicParticipantQrLanding } from "./pages/PublicParticipantQrLanding";
 export { default as ServiceSuppliesV2 } from "./pages/ServiceSuppliesV2";

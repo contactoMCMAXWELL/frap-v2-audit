@@ -5,7 +5,6 @@ import {
   localInputToIso,
 } from "../../utils/datetime";
 import { v2Api } from "../api/v2";
-import { participantProtectionApi } from "../api/participantProtection";
 import { geocodeAddress } from "../utils/maps";
 
 const emptyLocation = (role, sequence = 1) => ({
@@ -128,8 +127,6 @@ export default function ServiceIntakeCreateV2({ session }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [geoLoadingKey, setGeoLoadingKey] = useState("");
-  const [pendingLinkServiceId, setPendingLinkServiceId] = useState("");
-  const [retryingLink, setRetryingLink] = useState(false);
 
   const normalizedRole = String(session?.role || "")
     .trim()
@@ -336,38 +333,6 @@ export default function ServiceIntakeCreateV2({ session }) {
     return "";
   };
 
-  const createParticipantServiceLink = async (serviceIntakeId) => {
-    return participantProtectionApi.linkService({
-      intakeId: parentIntakeIdParam,
-      participantId: participantIdParam,
-      serviceIntakeId,
-      token: session?.token,
-      companyId: session?.companyId,
-      userId: session?.userId,
-    });
-  };
-
-  const retryParticipantLink = async () => {
-    if (!pendingLinkServiceId || !hasParticipantContext) return;
-
-    try {
-      setRetryingLink(true);
-      setError("");
-
-      await createParticipantServiceLink(pendingLinkServiceId);
-
-      navigate(`/v2/intakes/${pendingLinkServiceId}/timeline`);
-    } catch (linkError) {
-      setError(
-        `El servicio ${pendingLinkServiceId} sigue creado y válido, pero no fue posible vincularlo al participante. ${
-          linkError?.message || "Reintenta la vinculación o abre el servicio para continuar."
-        }`
-      );
-    } finally {
-      setRetryingLink(false);
-    }
-  };
-
   const onSubmit = async (e) => {
     e.preventDefault();
 
@@ -375,12 +340,6 @@ export default function ServiceIntakeCreateV2({ session }) {
       setLoading(true);
       setError("");
 
-      if (pendingLinkServiceId) {
-        setError(
-          "Ya existe un servicio creado pendiente de vinculación. Reintenta el vínculo o abre ese servicio antes de crear otro."
-        );
-        return;
-      }
 
       if (hasParticipantContext) {
         if (form.operation_mode === "standby") {
@@ -559,6 +518,11 @@ export default function ServiceIntakeCreateV2({ session }) {
         locations,
       };
 
+
+      if (hasParticipantContext) {
+        payload.participant_id = participantIdParam;
+      }
+
       if (isRetrospective) {
         const occurredAtIso =
           localInputToIso(form.occurred_at);
@@ -617,20 +581,6 @@ export default function ServiceIntakeCreateV2({ session }) {
           companyId: session?.companyId,
           userId: session?.userId,
         });
-
-      if (hasParticipantContext) {
-        try {
-          await createParticipantServiceLink(created.id);
-        } catch (linkError) {
-          setPendingLinkServiceId(String(created.id));
-          setError(
-            `El servicio ${created.id} se creó correctamente y no se eliminó, pero no fue posible vincularlo al participante. ${
-              linkError?.message || "Puedes reintentar la vinculación o abrir el servicio para continuar."
-            }`
-          );
-          return;
-        }
-      }
 
       navigate(
         `/v2/intakes/${created.id}/timeline`
@@ -1179,32 +1129,6 @@ export default function ServiceIntakeCreateV2({ session }) {
           </label>
         </section>
 
-        {pendingLinkServiceId && hasParticipantContext && (
-          <div style={linkRecoveryStyle}>
-            <strong>Servicio creado; vínculo pendiente</strong>
-            <span>
-              El servicio {pendingLinkServiceId} ya existe y se conservará. No vuelvas
-              a crear otro servicio para la misma atención mientras resolvemos el vínculo.
-            </span>
-            <div style={linkRecoveryActionsStyle}>
-              <button
-                type="button"
-                disabled={retryingLink}
-                onClick={retryParticipantLink}
-              >
-                {retryingLink ? "Reintentando..." : "Reintentar vinculación"}
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  navigate(`/v2/intakes/${pendingLinkServiceId}/timeline`)
-                }
-              >
-                Abrir servicio sin vincular
-              </button>
-            </div>
-          </div>
-        )}
 
         {error && (
           <p
@@ -1220,7 +1144,7 @@ export default function ServiceIntakeCreateV2({ session }) {
         <div style={stickyFooterStyle}>
           <button
             type="submit"
-            disabled={loading || Boolean(pendingLinkServiceId)}
+            disabled={loading}
           >
             {loading
               ? "Guardando..."
@@ -1511,22 +1435,7 @@ const participantContextStyle = {
   lineHeight: 1.45,
 };
 
-const linkRecoveryStyle = {
-  display: "grid",
-  gap: 9,
-  padding: 14,
-  border: "1px solid #f59e0b",
-  borderRadius: 12,
-  background: "#fffbeb",
-  color: "#92400e",
-  lineHeight: 1.45,
-};
 
-const linkRecoveryActionsStyle = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: 10,
-};
 
 const formStyle = {
   display: "grid",

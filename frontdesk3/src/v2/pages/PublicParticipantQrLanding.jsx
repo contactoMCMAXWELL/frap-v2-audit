@@ -26,7 +26,7 @@ export default function PublicParticipantQrLanding({ session }) {
       const canResolveParticipant =
         Boolean(session?.token) &&
         Boolean(session?.companyId) &&
-        ["SUPERADMIN", "ADMIN", "DISPATCH"].includes(role);
+        ["SUPERADMIN", "ADMIN", "DISPATCH", "PARAMEDIC", "DOCTOR"].includes(role);
 
       if (canResolveParticipant) {
         try {

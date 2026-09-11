@@ -4,10 +4,16 @@ import uuid
 from datetime import datetime, timezone
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_company_id, get_current_user, get_db
+from app.models.event_participant_protection import (
+    EventParticipant,
+    EventParticipantAccessLog,
+    EventParticipantProtection,
+    EventParticipantServiceLink,
+)
 from app.models.service import Service
 from app.models.service_dispatch_event_v2 import ServiceDispatchEventV2
 from app.models.service_intake_v2 import ServiceIntakeV2
@@ -443,13 +449,39 @@ def get_service_intake(
 @router.post("/", response_model=ServiceIntakeV2Out, status_code=201)
 def create_service_intake(
     payload: ServiceIntakeV2Create,
+    request: Request,
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
     company_id: uuid.UUID = Depends(get_company_id),
 ):
     _enforce_monthly_service_limit(db, company_id)
 
+    role = str(getattr(user, "role", "") or "").strip().upper()
+    standard_create_roles = {"SUPERADMIN", "ADMIN", "DISPATCH"}
+
+    if role not in standard_create_roles and role != "PARAMEDIC":
+        raise HTTPException(
+            status_code=403,
+            detail="No autorizado para crear servicios",
+        )
+
+
     capture_mode = validate_capture_mode(payload.capture_mode)
+
+    if role == "PARAMEDIC":
+        if capture_mode == RETROSPECTIVE_CAPTURE_MODE:
+            raise HTTPException(
+                status_code=403,
+                detail="El paramédico sólo puede crear servicios en tiempo real",
+            )
+
+        if str(payload.operation_mode or "").strip().lower() == "standby":
+            raise HTTPException(
+                status_code=403,
+                detail="El paramédico no puede crear guardias/eventos",
+            )
+
+
 
     if capture_mode == RETROSPECTIVE_CAPTURE_MODE:
         require_retrospective_role(user)
@@ -558,6 +590,48 @@ def create_service_intake(
         operation_mode=operation_mode,
     )
 
+    protection = None
+    participant = None
+
+    if payload.participant_id is not None:
+        if payload.parent_intake_id is None:
+            raise HTTPException(
+                status_code=422,
+                detail="participant_id requiere parent_intake_id",
+            )
+
+        protection = (
+            db.query(EventParticipantProtection)
+            .filter(
+                EventParticipantProtection.company_id == company_id,
+                EventParticipantProtection.intake_id == payload.parent_intake_id,
+            )
+            .first()
+        )
+
+        if not protection:
+            raise HTTPException(
+                status_code=404,
+                detail="Protección de Participantes no configurada para esta guardia/evento",
+            )
+
+        participant = (
+            db.query(EventParticipant)
+            .filter(
+                EventParticipant.id == payload.participant_id,
+                EventParticipant.company_id == company_id,
+                EventParticipant.protection_id == protection.id,
+            )
+            .first()
+        )
+
+        if not participant:
+            raise HTTPException(
+                status_code=404,
+                detail="Participante no encontrado en esta guardia/evento",
+            )
+
+
     if parent is None and payload.parent_intake_id is not None:
         raise HTTPException(
             status_code=404,
@@ -597,6 +671,7 @@ def create_service_intake(
             "locations",
             "operation_mode",
             "parent_intake_id",
+            "participant_id",
             "standby_event_name",
             "standby_starts_at",
             "standby_ends_at",
@@ -691,6 +766,61 @@ def create_service_intake(
     )
 
     db.add(created_event)
+
+    if participant is not None:
+        existing_link = (
+            db.query(EventParticipantServiceLink)
+            .filter(
+                EventParticipantServiceLink.company_id == company_id,
+                EventParticipantServiceLink.intake_id == row.id,
+            )
+            .first()
+        )
+
+        if existing_link:
+            if existing_link.participant_id != participant.id:
+                raise HTTPException(
+                    status_code=409,
+                    detail="El servicio ya está vinculado a otro participante",
+                )
+        else:
+            participant_link = EventParticipantServiceLink(
+                company_id=company_id,
+                participant_id=participant.id,
+                intake_id=row.id,
+                created_by_user_id=getattr(user, "id", None),
+            )
+            db.add(participant_link)
+
+            actor_role = str(getattr(user, "role", "") or "").upper()
+
+            db.add(
+                EventParticipantAccessLog(
+                    company_id=company_id,
+                    participant_id=participant.id,
+                    user_id=getattr(user, "id", None),
+                    action="LINK_SERVICE",
+                    resource="service_link",
+                    reason="Vinculación de participante con servicio del evento",
+                    ip_address=(
+                        str(request.client.host)[:64]
+                        if request.client and request.client.host
+                        else None
+                    ),
+                    user_agent=(
+                        (request.headers.get("user-agent") or "")[:500] or None
+                    ),
+                    extra_json={
+                        "actor_name": getattr(user, "name", None),
+                        "actor_email": getattr(user, "email", None),
+                        "actor_role": actor_role,
+                        "protection_id": str(protection.id),
+                        "event_intake_id": str(protection.intake_id),
+                        "service_intake_id": str(row.id),
+                    },
+                )
+            )
+
 
     db.commit()
     db.refresh(row)

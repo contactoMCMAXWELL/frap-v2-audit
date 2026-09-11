@@ -53,6 +53,10 @@ class ServiceIntakeV2Create(ServiceIntakeV2Base):
     # Relación con una guardia padre.
     parent_intake_id: Optional[UUID] = None
 
+    # Participante del evento que origina esta atención.
+    # Sólo se utiliza durante la creación; no se persiste en ServiceIntakeV2.
+    participant_id: Optional[UUID] = None
+
     # Datos propios de guardia/cobertura.
     standby_event_name: Optional[str] = None
     standby_starts_at: Optional[datetime] = None

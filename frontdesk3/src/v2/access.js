@@ -26,6 +26,7 @@ export function getMenuForRole(role) {
   const isAdmin = ["SUPERADMIN", "ADMIN"].includes(r);
   const isDispatch = ["SUPERADMIN", "ADMIN", "DISPATCH"].includes(r);
   const isClinical = ["SUPERADMIN", "ADMIN", "PARAMEDIC", "DOCTOR", "RECEIVER_MD", "AUDITOR"].includes(r);
+  const canParticipantProtection = ["SUPERADMIN", "ADMIN", "DISPATCH", "PARAMEDIC", "DOCTOR"].includes(r);
   const canAudit = ["SUPERADMIN", "ADMIN", "AUDITOR"].includes(r);
 
   return [
@@ -39,6 +40,14 @@ export function getMenuForRole(role) {
           items: [
             { to: "/v2/intakes", label: "Dispatch" },
             { to: "/v2/intakes/nuevo", label: "Nuevo servicio" },
+          ],
+        }
+      : null,
+    canParticipantProtection
+      ? {
+          title: "Protección médica",
+          items: [
+            { to: "/v2/proteccion-participantes", label: "Protección de Participantes" },
           ],
         }
       : null,

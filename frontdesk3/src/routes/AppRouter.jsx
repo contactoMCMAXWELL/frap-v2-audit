@@ -17,6 +17,7 @@ import {
   ServiceIntakeCreateV2,
   ServiceTimelineV2,
   EventParticipantProtectionConfig,
+  EventParticipantProtectionList,
   PublicEventParticipantLanding,
   PublicParticipantQrLanding,
   V2AdminHome,
@@ -153,7 +154,7 @@ export default function AppRouter() {
           <Route
             path="intakes/nuevo"
             element={
-              <RequireRole allowedRoles={["SUPERADMIN", "ADMIN", "DISPATCH"]}>
+              <RequireRole allowedRoles={["SUPERADMIN", "ADMIN", "DISPATCH", "PARAMEDIC"]}>
                 <ServiceIntakeCreateV2 session={session} />
               </RequireRole>
             }
@@ -165,9 +166,18 @@ export default function AppRouter() {
           />
 
           <Route
+            path="proteccion-participantes"
+            element={
+              <RequireRole allowedRoles={["SUPERADMIN", "ADMIN", "DISPATCH", "PARAMEDIC", "DOCTOR"]}>
+                <EventParticipantProtectionList session={session} />
+              </RequireRole>
+            }
+          />
+
+          <Route
             path="intakes/:intakeId/proteccion-participantes"
             element={
-              <RequireRole allowedRoles={["SUPERADMIN", "ADMIN", "DISPATCH"]}>
+              <RequireRole allowedRoles={["SUPERADMIN", "ADMIN", "DISPATCH", "PARAMEDIC", "DOCTOR"]}>
                 <EventParticipantProtectionConfig session={session} />
               </RequireRole>
             }
