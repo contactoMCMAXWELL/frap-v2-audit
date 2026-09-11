@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import QRCode from "qrcode";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { v2Api } from "../api/v2";
 import { participantProtectionApi } from "../api/participantProtection";
@@ -105,6 +106,11 @@ export default function EventParticipantProtectionConfig({ session }) {
   const [participantSearch, setParticipantSearch] = useState("");
   const [participantFilter, setParticipantFilter] = useState("TODOS");
   const [selectedParticipant, setSelectedParticipant] = useState(null);
+  const [selectedQrParticipantIds, setSelectedQrParticipantIds] = useState([]);
+  const [batchQrPrintState, setBatchQrPrintState] = useState("idle");
+  const [batchQrPrintError, setBatchQrPrintError] = useState("");
+  const [qrPrintState, setQrPrintState] = useState("idle");
+  const [qrPrintError, setQrPrintError] = useState("");
   const [medicalProfile, setMedicalProfile] = useState(null);
   const [medicalProfileState, setMedicalProfileState] = useState("idle");
   const [medicalProfileError, setMedicalProfileError] = useState("");
@@ -456,6 +462,588 @@ export default function EventParticipantProtectionConfig({ session }) {
     });
 
     navigate(`/v2/intakes/nuevo?${params.toString()}`);
+  };
+
+  const toggleQrParticipantSelection = (participantId) => {
+    setSelectedQrParticipantIds((current) =>
+      current.includes(participantId)
+        ? current.filter((id) => id !== participantId)
+        : [...current, participantId]
+    );
+  };
+
+  const completedParticipants = participants.filter(
+    (participant) =>
+      participant.status === "COMPLETO" ||
+      participant.status === "ACTUALIZADO"
+  );
+
+  const selectedCompletedParticipants = completedParticipants.filter(
+    (participant) => selectedQrParticipantIds.includes(participant.id)
+  );
+
+  const visibleCompletedParticipants = filteredParticipants.filter(
+    (participant) =>
+      participant.status === "COMPLETO" ||
+      participant.status === "ACTUALIZADO"
+  );
+
+  const allVisibleCompletedSelected =
+    visibleCompletedParticipants.length > 0 &&
+    visibleCompletedParticipants.every((participant) =>
+      selectedQrParticipantIds.includes(participant.id)
+    );
+
+  const toggleVisibleCompletedSelection = () => {
+    const visibleIds = visibleCompletedParticipants.map(
+      (participant) => participant.id
+    );
+
+    setSelectedQrParticipantIds((current) => {
+      if (allVisibleCompletedSelected) {
+        return current.filter((id) => !visibleIds.includes(id));
+      }
+
+      return Array.from(new Set([...current, ...visibleIds]));
+    });
+  };
+
+  const printParticipantQrBatch = async (mode) => {
+    if (batchQrPrintState === "loading") return;
+
+    const targets =
+      mode === "all"
+        ? completedParticipants
+        : selectedCompletedParticipants;
+
+    if (!targets.length) {
+      setBatchQrPrintError(
+        mode === "all"
+          ? "No hay fichas terminadas disponibles para imprimir."
+          : "Selecciona al menos una ficha terminada."
+      );
+      return;
+    }
+
+    let printWindow = null;
+
+    try {
+      setBatchQrPrintState("loading");
+      setBatchQrPrintError("");
+
+      printWindow = window.open(
+        "",
+        "_blank",
+        "width=1100,height=900"
+      );
+
+      if (!printWindow) {
+        throw new Error(
+          "El navegador bloqueó la ventana de impresión. Permite ventanas emergentes para AmbulanciaYA."
+        );
+      }
+
+      printWindow.document.write(`
+        <!doctype html>
+        <html>
+          <head>
+            <meta charset="utf-8" />
+            <title>Preparando identificaciones QR</title>
+          </head>
+          <body style="font-family:Arial,sans-serif;padding:32px;color:#315b79">
+            Preparando ${targets.length} identificaciones QR...
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+
+      const eventName =
+        form.public_event_name ||
+        intake?.standby_event_name ||
+        intake?.service_type ||
+        "Evento";
+
+      const credentials = [];
+
+      for (const participant of targets) {
+        const result = await participantProtectionApi.qrPrint({
+          intakeId,
+          participantId: participant.id,
+          token: session?.token,
+          companyId: session?.companyId,
+          userId: session?.userId,
+        });
+
+        const qrUrl = `${window.location.origin}${result.qr_path}`;
+
+        const qrDataUrl = await QRCode.toDataURL(qrUrl, {
+          width: 420,
+          margin: 1,
+          errorCorrectionLevel: "M",
+        });
+
+        credentials.push({
+          participantId: result.participant_id,
+          participantNumber: result.participant_number,
+          displayName: result.display_name || "Participante",
+          qrDataUrl,
+        });
+      }
+
+      const doc = printWindow.document;
+
+      doc.head.innerHTML = `
+        <meta charset="utf-8" />
+        <title>Identificaciones QR de participantes</title>
+        <style>
+          * {
+            box-sizing: border-box;
+          }
+
+          body {
+            margin: 0;
+            padding: 18px;
+            font-family: Arial, Helvetica, sans-serif;
+            background: #eef4f8;
+            color: #17354a;
+          }
+
+          .page {
+            width: 194mm;
+            min-height: 281mm;
+            margin: 0 auto 18px;
+            padding: 0;
+            display: grid;
+            grid-template-columns: repeat(2, 90mm);
+            grid-auto-rows: 125mm;
+            gap: 8mm;
+            align-content: start;
+            justify-content: center;
+            background: #fff;
+            box-shadow: 0 8px 30px rgba(29, 67, 91, 0.12);
+            page-break-after: always;
+          }
+
+          .page:last-child {
+            page-break-after: auto;
+          }
+
+          .credential {
+            width: 90mm;
+            height: 125mm;
+            padding: 8mm;
+            background: #ffffff;
+            border: 1px solid #c7d8e3;
+            border-radius: 5mm;
+            text-align: center;
+            overflow: hidden;
+          }
+
+          .brand {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #51758e;
+          }
+
+          .product {
+            margin-top: 3px;
+            font-size: 18px;
+            font-weight: 900;
+            color: #315b79;
+          }
+
+          .event {
+            margin-top: 9px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #d9e5ec;
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1.25;
+            min-height: 23px;
+          }
+
+          .name {
+            margin-top: 9px;
+            font-size: 18px;
+            font-weight: 900;
+            line-height: 1.1;
+            color: #183c55;
+            min-height: 39px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+
+          .number {
+            margin-top: 3px;
+            font-size: 12px;
+            font-weight: 800;
+            color: #5f8198;
+          }
+
+          .qr {
+            display: block;
+            width: 48mm;
+            height: 48mm;
+            margin: 7px auto 5px;
+          }
+
+          .instruction {
+            margin-top: 3px;
+            font-size: 12px;
+            font-weight: 850;
+            line-height: 1.25;
+            color: #244d68;
+          }
+
+          .privacy {
+            margin-top: 5px;
+            font-size: 7.5px;
+            line-height: 1.25;
+            color: #7890a0;
+          }
+
+          @page {
+            size: A4 portrait;
+            margin: 8mm;
+          }
+
+          @media print {
+            body {
+              padding: 0;
+              background: #fff;
+            }
+
+            .page {
+              width: 194mm;
+              min-height: 281mm;
+              margin: 0;
+              box-shadow: none;
+            }
+
+            .credential {
+              break-inside: avoid;
+            }
+          }
+        </style>
+      `;
+
+      doc.body.innerHTML = "";
+
+      for (let pageIndex = 0; pageIndex < credentials.length; pageIndex += 4) {
+        const page = doc.createElement("section");
+        page.className = "page";
+
+        const pageCredentials = credentials.slice(
+          pageIndex,
+          pageIndex + 4
+        );
+
+        pageCredentials.forEach((credential) => {
+          const card = doc.createElement("article");
+          card.className = "credential";
+
+          const brand = doc.createElement("div");
+          brand.className = "brand";
+          brand.textContent = "Protección médica del participante";
+
+          const product = doc.createElement("div");
+          product.className = "product";
+          product.textContent = "AmbulanciaYA";
+
+          const event = doc.createElement("div");
+          event.className = "event";
+          event.textContent = eventName;
+
+          const name = doc.createElement("div");
+          name.className = "name";
+          name.textContent = credential.displayName;
+
+          const number = doc.createElement("div");
+          number.className = "number";
+          number.textContent = credential.participantNumber
+            ? `Participante ${credential.participantNumber}`
+            : "Participante registrado";
+
+          const qr = doc.createElement("img");
+          qr.className = "qr";
+          qr.alt = "Código QR del participante";
+          qr.src = credential.qrDataUrl;
+
+          const instruction = doc.createElement("div");
+          instruction.className = "instruction";
+          instruction.textContent =
+            "Escanear en caso de atención médica";
+
+          const privacy = doc.createElement("div");
+          privacy.className = "privacy";
+          privacy.textContent =
+            "Esta identificación no contiene información médica visible. El acceso a datos protegidos requiere autorización dentro de AmbulanciaYA.";
+
+          card.appendChild(brand);
+          card.appendChild(product);
+          card.appendChild(event);
+          card.appendChild(name);
+          card.appendChild(number);
+          card.appendChild(qr);
+          card.appendChild(instruction);
+          card.appendChild(privacy);
+
+          page.appendChild(card);
+        });
+
+        doc.body.appendChild(page);
+      }
+
+      const images = Array.from(doc.images);
+
+      await Promise.all(
+        images.map(
+          (image) =>
+            new Promise((resolve) => {
+              if (image.complete) {
+                resolve();
+                return;
+              }
+
+              image.onload = resolve;
+              image.onerror = resolve;
+            })
+        )
+      );
+
+      setBatchQrPrintState("ready");
+      printWindow.focus();
+      printWindow.print();
+    } catch (printError) {
+      if (printWindow && !printWindow.closed) {
+        printWindow.close();
+      }
+
+      setBatchQrPrintState("error");
+      setBatchQrPrintError(
+        printError?.message ||
+          "No fue posible preparar las identificaciones QR."
+      );
+    }
+  };
+
+  const printParticipantQr = async () => {
+    if (!selectedParticipant?.id || qrPrintState === "loading") return;
+
+    let printWindow = null;
+
+    try {
+      setQrPrintState("loading");
+      setQrPrintError("");
+
+      printWindow = window.open(
+        "",
+        "_blank",
+        "width=720,height=900"
+      );
+
+      if (!printWindow) {
+        throw new Error(
+          "El navegador bloqueó la ventana de impresión. Permite ventanas emergentes para AmbulanciaYA."
+        );
+      }
+
+      printWindow.document.write(
+        "<!doctype html><html><head><title>Identificación QR</title></head><body></body></html>"
+      );
+      printWindow.document.close();
+
+      const result = await participantProtectionApi.qrPrint({
+        intakeId,
+        participantId: selectedParticipant.id,
+        token: session?.token,
+        companyId: session?.companyId,
+        userId: session?.userId,
+      });
+
+      const qrUrl = `${window.location.origin}${result.qr_path}`;
+
+      const qrDataUrl = await QRCode.toDataURL(qrUrl, {
+        width: 420,
+        margin: 1,
+        errorCorrectionLevel: "M",
+      });
+
+      const eventName =
+        form.public_event_name ||
+        intake?.standby_event_name ||
+        intake?.service_type ||
+        "Evento";
+
+      const doc = printWindow.document;
+
+      doc.head.innerHTML = `
+        <meta charset="utf-8" />
+        <title>Identificación QR del participante</title>
+        <style>
+          * {
+            box-sizing: border-box;
+          }
+
+          body {
+            margin: 0;
+            padding: 24px;
+            font-family: Arial, Helvetica, sans-serif;
+            background: #eef4f8;
+            color: #17354a;
+          }
+
+          .sheet {
+            min-height: calc(100vh - 48px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+
+          .credential {
+            width: 90mm;
+            min-height: 125mm;
+            padding: 8mm;
+            background: #ffffff;
+            border: 1px solid #c7d8e3;
+            border-radius: 6mm;
+            text-align: center;
+            box-shadow: 0 8px 28px rgba(29, 67, 91, 0.12);
+          }
+
+          .brand {
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #51758e;
+          }
+
+          .product {
+            margin-top: 3px;
+            font-size: 19px;
+            font-weight: 900;
+            color: #315b79;
+          }
+
+          .event {
+            margin-top: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #d9e5ec;
+            font-size: 13px;
+            font-weight: 700;
+            line-height: 1.35;
+          }
+
+          .name {
+            margin-top: 15px;
+            font-size: 22px;
+            font-weight: 900;
+            line-height: 1.15;
+            color: #183c55;
+          }
+
+          .number {
+            margin-top: 5px;
+            font-size: 13px;
+            font-weight: 800;
+            color: #5f8198;
+          }
+
+          .qr {
+            display: block;
+            width: 55mm;
+            height: 55mm;
+            margin: 15px auto 10px;
+          }
+
+          .instruction {
+            margin-top: 5px;
+            font-size: 14px;
+            font-weight: 850;
+            line-height: 1.3;
+            color: #244d68;
+          }
+
+          .privacy {
+            margin-top: 10px;
+            font-size: 9px;
+            line-height: 1.35;
+            color: #7890a0;
+          }
+
+          @media print {
+            @page {
+              size: auto;
+              margin: 8mm;
+            }
+
+            body {
+              padding: 0;
+              background: #ffffff;
+            }
+
+            .sheet {
+              min-height: 0;
+              display: block;
+            }
+
+            .credential {
+              box-shadow: none;
+              margin: 0 auto;
+            }
+          }
+        </style>
+      `;
+
+      doc.body.innerHTML = `
+        <div class="sheet">
+          <section class="credential">
+            <div class="brand">Protección médica del participante</div>
+            <div class="product">AmbulanciaYA</div>
+            <div class="event" id="eventName"></div>
+            <div class="name" id="participantName"></div>
+            <div class="number" id="participantNumber"></div>
+            <img class="qr" id="participantQr" alt="Código QR del participante" />
+            <div class="instruction">Escanear en caso de atención médica</div>
+            <div class="privacy">
+              Esta identificación no contiene información médica visible.
+              El acceso a datos protegidos requiere autorización dentro de AmbulanciaYA.
+            </div>
+          </section>
+        </div>
+      `;
+
+      doc.getElementById("eventName").textContent = eventName;
+      doc.getElementById("participantName").textContent =
+        result.display_name || "Participante";
+      doc.getElementById("participantNumber").textContent =
+        result.participant_number
+          ? `Participante ${result.participant_number}`
+          : "Participante registrado";
+      doc.getElementById("participantQr").src = qrDataUrl;
+
+      const image = doc.getElementById("participantQr");
+
+      image.onload = () => {
+        setQrPrintState("ready");
+        printWindow.focus();
+        printWindow.print();
+      };
+    } catch (printError) {
+      if (printWindow && !printWindow.closed) {
+        printWindow.close();
+      }
+
+      setQrPrintState("error");
+      setQrPrintError(
+        printError?.message ||
+          "No fue posible preparar la identificación QR."
+      );
+    }
   };
 
   const consultMedicalProfile = async () => {
@@ -1166,6 +1754,76 @@ export default function EventParticipantProtectionConfig({ session }) {
               </span>
             </div>
 
+            <div style={participantQrBatchBarStyle}>
+              <label style={participantQrSelectAllStyle}>
+                <input
+                  type="checkbox"
+                  checked={allVisibleCompletedSelected}
+                  onChange={toggleVisibleCompletedSelection}
+                  disabled={visibleCompletedParticipants.length === 0}
+                />
+                <span>
+                  Seleccionar fichas terminadas visibles
+                </span>
+              </label>
+
+              <div style={participantQrBatchActionsWrapStyle}>
+                <div style={participantQrBatchInfoStyle}>
+                  {selectedCompletedParticipants.length} seleccionados
+                  {" · "}
+                  {completedParticipants.length} fichas terminadas
+                </div>
+
+                <div style={participantQrBatchButtonsStyle}>
+                  <button
+                    type="button"
+                    onClick={() => printParticipantQrBatch("selected")}
+                    disabled={
+                      selectedCompletedParticipants.length === 0 ||
+                      batchQrPrintState === "loading"
+                    }
+                    style={{
+                      ...participantQrBatchButtonStyle,
+                      ...(selectedCompletedParticipants.length === 0 ||
+                      batchQrPrintState === "loading"
+                        ? participantQrBatchButtonDisabledStyle
+                        : {}),
+                    }}
+                  >
+                    {batchQrPrintState === "loading"
+                      ? "Preparando..."
+                      : `Imprimir seleccionados (${selectedCompletedParticipants.length})`}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => printParticipantQrBatch("all")}
+                    disabled={
+                      completedParticipants.length === 0 ||
+                      batchQrPrintState === "loading"
+                    }
+                    style={{
+                      ...participantQrBatchButtonPrimaryStyle,
+                      ...(completedParticipants.length === 0 ||
+                      batchQrPrintState === "loading"
+                        ? participantQrBatchButtonDisabledStyle
+                        : {}),
+                    }}
+                  >
+                    {batchQrPrintState === "loading"
+                      ? "Preparando..."
+                      : `Imprimir todos terminados (${completedParticipants.length})`}
+                  </button>
+                </div>
+
+                {batchQrPrintError && (
+                  <div style={participantQrBatchErrorStyle}>
+                    {batchQrPrintError}
+                  </div>
+                )}
+              </div>
+            </div>
+
             {filteredParticipants.length === 0 ? (
               <div style={participantEmptyStyle}>
                 No hay participantes que coincidan con la búsqueda.
@@ -1191,6 +1849,24 @@ export default function EventParticipantProtectionConfig({ session }) {
                       style={participantCardStyle}
                     >
                       <div style={participantIdentityStyle}>
+                        {completed && (
+                          <label
+                            style={participantQrCardCheckboxStyle}
+                            title="Seleccionar para impresión QR"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedQrParticipantIds.includes(
+                                participant.id
+                              )}
+                              onChange={() =>
+                                toggleQrParticipantSelection(participant.id)
+                              }
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </label>
+                        )}
+
                         <div style={participantNumberStyle}>
                           {participant.participant_number || "—"}
                         </div>
@@ -1454,6 +2130,43 @@ export default function EventParticipantProtectionConfig({ session }) {
                         selectedParticipant.updated_at
                     )}
                   </strong>
+                </div>
+
+                <div style={participantQrPanelStyle}>
+                  <div>
+                    <span style={participantQrEyebrowStyle}>
+                      Identificación segura
+                    </span>
+                    <strong style={participantQrTitleStyle}>
+                      Identificación QR del participante
+                    </strong>
+                    <div style={participantQrHelpStyle}>
+                      Genera una credencial imprimible con nombre, número de participante
+                      y código QR. No incluye teléfono, correo ni información médica.
+                    </div>
+
+                    {qrPrintError && (
+                      <div style={participantQrErrorStyle}>
+                        {qrPrintError}
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={printParticipantQr}
+                    disabled={qrPrintState === "loading"}
+                    style={{
+                      ...participantQrButtonStyle,
+                      ...(qrPrintState === "loading"
+                        ? participantQrButtonDisabledStyle
+                        : {}),
+                    }}
+                  >
+                    {qrPrintState === "loading"
+                      ? "Preparando..."
+                      : "Imprimir identificación QR"}
+                  </button>
                 </div>
 
                 <div style={participantAttentionPanelStyle}>
@@ -2346,6 +3059,92 @@ const participantFilterButtonActiveStyle = {
   color: "#fff",
 };
 
+const participantQrBatchBarStyle = {
+  marginTop: 10,
+  marginBottom: 10,
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid #d7e5dd",
+  background: "#f5faf7",
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+};
+
+const participantQrSelectAllStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  color: "#315d46",
+  fontSize: 12,
+  fontWeight: 800,
+  cursor: "pointer",
+};
+
+const participantQrBatchActionsWrapStyle = {
+  display: "grid",
+  justifyItems: "end",
+  gap: 7,
+};
+
+const participantQrBatchButtonsStyle = {
+  display: "flex",
+  flexWrap: "wrap",
+  justifyContent: "flex-end",
+  gap: 7,
+};
+
+const participantQrBatchButtonStyle = {
+  border: "1px solid #8eb29c",
+  borderRadius: 10,
+  padding: "8px 12px",
+  background: "#fff",
+  color: "#315d46",
+  fontSize: 11,
+  fontWeight: 850,
+  cursor: "pointer",
+};
+
+const participantQrBatchButtonPrimaryStyle = {
+  border: 0,
+  borderRadius: 10,
+  padding: "9px 13px",
+  background: "#3f7457",
+  color: "#fff",
+  fontSize: 11,
+  fontWeight: 850,
+  cursor: "pointer",
+};
+
+const participantQrBatchButtonDisabledStyle = {
+  opacity: 0.5,
+  cursor: "not-allowed",
+};
+
+const participantQrBatchErrorStyle = {
+  maxWidth: 520,
+  color: "#a33a3a",
+  fontSize: 11,
+  fontWeight: 700,
+  textAlign: "right",
+};
+
+const participantQrBatchInfoStyle = {
+  color: "#688173",
+  fontSize: 12,
+  fontWeight: 700,
+};
+
+const participantQrCardCheckboxStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  flex: "0 0 auto",
+  cursor: "pointer",
+};
+
 const participantListHeaderStyle = {
   display: "flex",
   justifyContent: "space-between",
@@ -2550,6 +3349,67 @@ const participantUpdateStyle = {
   marginTop: 14,
   color: "#6e8596",
   fontSize: 12,
+};
+
+const participantQrPanelStyle = {
+  marginTop: 18,
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 14,
+  padding: 16,
+  borderRadius: 16,
+  border: "1px solid #cfe3d7",
+  background: "#f5faf7",
+};
+
+const participantQrEyebrowStyle = {
+  display: "block",
+  marginBottom: 4,
+  color: "#5f8770",
+  fontSize: 10,
+  fontWeight: 850,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+};
+
+const participantQrTitleStyle = {
+  display: "block",
+  color: "#315d46",
+  fontSize: 14,
+  fontWeight: 900,
+};
+
+const participantQrHelpStyle = {
+  maxWidth: 560,
+  marginTop: 5,
+  color: "#688173",
+  fontSize: 12,
+  lineHeight: 1.45,
+};
+
+const participantQrErrorStyle = {
+  marginTop: 8,
+  color: "#a33a3a",
+  fontSize: 12,
+  fontWeight: 700,
+};
+
+const participantQrButtonStyle = {
+  border: 0,
+  borderRadius: 11,
+  padding: "11px 15px",
+  background: "#3f7457",
+  color: "#fff",
+  fontSize: 12,
+  fontWeight: 850,
+  cursor: "pointer",
+};
+
+const participantQrButtonDisabledStyle = {
+  opacity: 0.6,
+  cursor: "wait",
 };
 
 const participantAttentionPanelStyle = {

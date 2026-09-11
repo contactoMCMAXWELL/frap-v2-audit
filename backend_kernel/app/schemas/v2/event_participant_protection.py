@@ -103,6 +103,14 @@ class ParticipantQrResolveOut(BaseModel):
     participant_id: UUID
 
 
+class ParticipantQrPrintOut(BaseModel):
+    participant_id: UUID
+    participant_number: Optional[str] = None
+    display_name: str
+    qr_token: str
+    qr_path: str
+
+
 class PublicEmergencyContactInput(BaseModel):
     contact_order: int = Field(default=1, ge=1, le=2)
     name: str = Field(min_length=1, max_length=180)

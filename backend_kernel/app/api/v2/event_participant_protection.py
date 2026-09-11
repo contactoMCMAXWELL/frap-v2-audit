@@ -30,6 +30,7 @@ from app.schemas.v2.event_participant_protection import (
     PublicParticipantSelfOut,
     PublicParticipantQrValidationOut,
     ParticipantQrResolveOut,
+    ParticipantQrPrintOut,
     ParticipantPrivateOut,
     PublicEventProtectionOut,
     PublicParticipantComplete,
@@ -266,6 +267,61 @@ def list_event_participants(
         .order_by(EventParticipant.created_at.asc())
         .all()
     )
+
+
+@router.get(
+    "/v2/event-participant-protection/{intake_id}/participants/{participant_id}/qr-print",
+    response_model=ParticipantQrPrintOut,
+)
+def get_participant_qr_print(
+    intake_id: UUID,
+    participant_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    company_id: UUID = Depends(get_company_id),
+    user=Depends(get_current_user),
+):
+    protection, participant = _participant_for_event_or_404(
+        db,
+        company_id,
+        intake_id,
+        participant_id,
+    )
+
+    if str(participant.status or "").upper() == "CANCELADO":
+        raise HTTPException(
+            status_code=409,
+            detail="El participante está cancelado",
+        )
+
+    display_name = " ".join(
+        value.strip()
+        for value in [
+            participant.first_name or "",
+            participant.paternal_surname or "",
+            participant.maternal_surname or "",
+        ]
+        if value and value.strip()
+    )
+
+    _register_access(
+        db,
+        company_id=company_id,
+        participant=participant,
+        protection=protection,
+        user=user,
+        request=request,
+        action="PRINT_PARTICIPANT_QR",
+        resource="participant_qr",
+    )
+
+    return {
+        "participant_id": participant.id,
+        "participant_number": participant.participant_number,
+        "display_name": display_name or "Participante",
+        "qr_token": participant.qr_token,
+        "qr_path": f"/participante/qr/{participant.qr_token}",
+    }
 
 
 @router.post(

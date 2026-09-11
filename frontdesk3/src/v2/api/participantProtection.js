@@ -164,7 +164,25 @@ export const participantProtectionApi = {
         userId,
       }
     ),
-
+  qrPrint: async ({
+    intakeId,
+    participantId,
+    token,
+    companyId,
+    userId,
+  }) =>
+    request(
+      `/v2/event-participant-protection/${encodeURIComponent(
+        intakeId
+      )}/participants/${encodeURIComponent(
+        participantId
+      )}/qr-print`,
+      {
+        token,
+        companyId,
+        userId,
+      }
+    ),
   medicalProfile: async ({
     intakeId,
     participantId,
