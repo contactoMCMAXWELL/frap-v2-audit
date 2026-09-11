@@ -55,3 +55,6 @@ infra/openapi.json
 
 # Configuración productiva con secretos
 infra/docker-compose.yml
+
+# Archivos multimedia generados en producción
+backend_kernel/media/
