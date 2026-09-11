@@ -75,7 +75,11 @@ class ParticipantPrivateOut(PublicParticipantCreate):
     status: str
     source: str
     preloaded: bool
+    vehicle_make_model: Optional[str] = None
+    vehicle_color: Optional[str] = None
+    vehicle_plates: Optional[str] = None
     profile_completed_at: Optional[datetime] = None
+    last_participant_update_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 
