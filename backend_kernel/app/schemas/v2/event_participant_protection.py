@@ -93,6 +93,16 @@ class ParticipantCreatedOut(BaseModel):
     status: str
 
 
+class PublicParticipantQrValidationOut(BaseModel):
+    valid: bool
+    message: str
+
+
+class ParticipantQrResolveOut(BaseModel):
+    event_intake_id: UUID
+    participant_id: UUID
+
+
 class PublicEmergencyContactInput(BaseModel):
     contact_order: int = Field(default=1, ge=1, le=2)
     name: str = Field(min_length=1, max_length=180)

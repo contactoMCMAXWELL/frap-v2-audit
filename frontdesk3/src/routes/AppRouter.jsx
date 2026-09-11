@@ -18,6 +18,7 @@ import {
   ServiceTimelineV2,
   EventParticipantProtectionConfig,
   PublicEventParticipantLanding,
+  PublicParticipantQrLanding,
   V2AdminHome,
   V2AdminDashboardPage,
   V2AdminRolesPage,
@@ -81,6 +82,7 @@ export default function AppRouter() {
         />
 
         <Route path="/evento/:publicToken" element={<PublicEventParticipantLanding />} />
+        <Route path="/participante/qr/:qrToken" element={<PublicParticipantQrLanding session={session} />} />
 
         <Route
           path="/dispatch"

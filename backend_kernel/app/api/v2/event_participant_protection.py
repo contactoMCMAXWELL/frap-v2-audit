@@ -28,6 +28,8 @@ from app.schemas.v2.event_participant_protection import (
     ParticipantServiceLinkCreate,
     ParticipantServiceLinkOut,
     PublicParticipantSelfOut,
+    PublicParticipantQrValidationOut,
+    ParticipantQrResolveOut,
     ParticipantPrivateOut,
     PublicEventProtectionOut,
     PublicParticipantComplete,
@@ -465,6 +467,91 @@ def get_participant_medical_profile(
 
 
 @router.get(
+    "/v2/event-participant-protection/participant-qr/{qr_token}",
+    response_model=ParticipantQrResolveOut,
+)
+def resolve_participant_qr(
+    qr_token: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    company_id: UUID = Depends(get_company_id),
+    user=Depends(get_current_user),
+):
+    row = (
+        db.query(EventParticipant, EventParticipantProtection)
+        .join(
+            EventParticipantProtection,
+            EventParticipantProtection.id == EventParticipant.protection_id,
+        )
+        .filter(
+            EventParticipant.qr_token == qr_token,
+            EventParticipant.company_id == company_id,
+            EventParticipantProtection.company_id == company_id,
+            EventParticipantProtection.enabled.is_(True),
+            EventParticipant.status != "CANCELADO",
+        )
+        .first()
+    )
+
+    if not row:
+        raise HTTPException(
+            status_code=404,
+            detail="Código no válido",
+        )
+
+    participant, protection = row
+
+    _register_access(
+        db,
+        company_id=company_id,
+        participant=participant,
+        protection=protection,
+        user=user,
+        request=request,
+        action="SCAN_PARTICIPANT_QR",
+        resource="participant_qr",
+    )
+
+    return {
+        "event_intake_id": protection.intake_id,
+        "participant_id": participant.id,
+    }
+
+@router.get(
+    "/v2/public/participant-qr/{qr_token}",
+    response_model=PublicParticipantQrValidationOut,
+)
+def validate_public_participant_qr(
+    qr_token: str,
+    db: Session = Depends(get_db),
+):
+    participant = (
+        db.query(EventParticipant)
+        .join(
+            EventParticipantProtection,
+            EventParticipantProtection.id == EventParticipant.protection_id,
+        )
+        .filter(
+            EventParticipant.qr_token == qr_token,
+            EventParticipantProtection.enabled.is_(True),
+            EventParticipant.status != "CANCELADO",
+        )
+        .first()
+    )
+
+    if not participant:
+        return {
+            "valid": False,
+            "message": "Código no válido",
+        }
+
+    return {
+        "valid": True,
+        "message": "Participante registrado en el evento",
+    }
+
+
+@router.get(
     "/v2/public/events/{public_token}",
     response_model=PublicEventProtectionOut,
 )
@@ -530,6 +617,7 @@ def create_public_participant(
         company_id=protection.company_id,
         protection_id=protection.id,
         participant_token=secrets.token_urlsafe(32),
+        qr_token=secrets.token_urlsafe(32),
         status="INICIADO",
         source="public",
         participant_number=(payload.participant_number or "").strip() or None,

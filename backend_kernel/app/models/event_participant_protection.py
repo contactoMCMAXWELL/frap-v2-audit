@@ -57,6 +57,7 @@ class EventParticipant(Base):
     protection_id = mapped_column(UUID(as_uuid=True), ForeignKey("event_participant_protection.id", ondelete="CASCADE"), nullable=False, index=True)
 
     participant_token: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    qr_token: Mapped[str] = mapped_column(String(80), nullable=False, unique=True, index=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="INICIADO", server_default="INICIADO", index=True)
     source: Mapped[str] = mapped_column(String(20), nullable=False, default="public", server_default="public")
 

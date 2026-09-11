@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { v2Api } from "../api/v2";
 import { participantProtectionApi } from "../api/participantProtection";
 
@@ -88,7 +88,10 @@ function formatParticipantDate(value) {
 
 export default function EventParticipantProtectionConfig({ session }) {
   const { intakeId } = useParams();
+  const [searchParams] = useSearchParams();
+  const participantIdFromQr = searchParams.get("participantId");
   const navigate = useNavigate();
+  const qrParticipantOpenedRef = useRef(false);
   const [intake, setIntake] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [saved, setSaved] = useState(null);
@@ -244,6 +247,27 @@ export default function EventParticipantProtectionConfig({ session }) {
       mounted = false;
     };
   }, [intakeId, session?.token, session?.companyId, session?.userId]);
+
+  useEffect(() => {
+    if (
+      !participantIdFromQr ||
+      !participants.length ||
+      qrParticipantOpenedRef.current === participantIdFromQr
+    ) {
+      return;
+    }
+
+    const participant = participants.find(
+      (row) => String(row?.id || "") === String(participantIdFromQr)
+    );
+
+    if (participant) {
+      qrParticipantOpenedRef.current = participantIdFromQr;
+      setActiveSection("participantes");
+      resetMedicalProfile();
+      setSelectedParticipant(participant);
+    }
+  }, [participantIdFromQr, participants]);
 
   const onChange = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 

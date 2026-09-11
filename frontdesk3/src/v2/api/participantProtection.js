@@ -269,4 +269,29 @@ export const participantProtectionApi = {
         body: payload,
       }
     ),
+  publicQrValidate: async ({
+    qrToken,
+  }) =>
+    request(
+      `/v2/public/participant-qr/${encodeURIComponent(
+        qrToken
+      )}`
+    ),
+
+  resolveQr: async ({
+    qrToken,
+    token,
+    companyId,
+    userId,
+  }) =>
+    request(
+      `/v2/event-participant-protection/participant-qr/${encodeURIComponent(
+        qrToken
+      )}`,
+      {
+        token,
+        companyId,
+        userId,
+      }
+    ),
 };
