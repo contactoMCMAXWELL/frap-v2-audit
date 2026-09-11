@@ -112,6 +112,7 @@ export default function EventParticipantProtectionConfig({ session }) {
   const [qrPrintState, setQrPrintState] = useState("idle");
   const [qrPrintError, setQrPrintError] = useState("");
   const [medicalProfile, setMedicalProfile] = useState(null);
+  const [emergencyContacts, setEmergencyContacts] = useState([]);
   const [medicalProfileState, setMedicalProfileState] = useState("idle");
   const [medicalProfileError, setMedicalProfileError] = useState("");
   const [activeSection, setActiveSection] = useState("resumen");
@@ -439,6 +440,7 @@ export default function EventParticipantProtectionConfig({ session }) {
 
   const resetMedicalProfile = () => {
     setMedicalProfile(null);
+    setEmergencyContacts([]);
     setMedicalProfileState("idle");
     setMedicalProfileError("");
   };
@@ -1053,6 +1055,7 @@ export default function EventParticipantProtectionConfig({ session }) {
       setMedicalProfileState("loading");
       setMedicalProfileError("");
       setMedicalProfile(null);
+      setEmergencyContacts([]);
 
       const result = await participantProtectionApi.medicalProfile({
         intakeId,
@@ -1062,10 +1065,16 @@ export default function EventParticipantProtectionConfig({ session }) {
         userId: session?.userId,
       });
 
+      const contacts = Array.isArray(result?.emergency_contacts)
+        ? result.emergency_contacts
+        : [];
+
       setMedicalProfile(result?.profile || null);
-      setMedicalProfileState(result?.profile ? "loaded" : "empty");
+      setEmergencyContacts(contacts);
+      setMedicalProfileState(result?.profile || contacts.length > 0 ? "loaded" : "empty");
     } catch (medicalError) {
       setMedicalProfile(null);
+      setEmergencyContacts([]);
 
       if (medicalError?.status === 403) {
         setMedicalProfileState("forbidden");
@@ -2258,7 +2267,7 @@ export default function EventParticipantProtectionConfig({ session }) {
                     </div>
                   )}
 
-                  {medicalProfileState === "loaded" && medicalProfile && (
+                  {medicalProfileState === "loaded" && (medicalProfile || emergencyContacts.length > 0) && (
                     <div style={participantMedicalContentStyle}>
                       <div style={participantMedicalAlertGridStyle}>
                         <div style={participantMedicalAlertItemStyle}>
@@ -2334,10 +2343,49 @@ export default function EventParticipantProtectionConfig({ session }) {
                         </div>
                       </div>
 
-                      <div style={participantMedicalSectionStyle}>
-                        <strong style={participantMedicalSectionTitleStyle}>
-                          Cobertura y traslado
-                        </strong>
+                      {emergencyContacts.length > 0 && (
+                        <div style={participantMedicalSectionStyle}>
+                          <strong style={participantMedicalSectionTitleStyle}>
+                            Contactos de emergencia
+                          </strong>
+
+                          <div style={participantMedicalGridStyle}>
+                            {emergencyContacts.map((contact, index) => (
+                              <div
+                                key={`${contact?.contact_order || index}-${contact?.phone || index}`}
+                                style={participantMedicalFieldStyle}
+                              >
+                                <span style={participantMedicalFieldLabelStyle}>
+                                  Contacto {contact?.contact_order || index + 1}
+                                </span>
+
+                                <strong>
+                                  {renderMedicalText(contact?.name)}
+                                </strong>
+
+                                <span style={participantMedicalDetailTextStyle}>
+                                  {renderMedicalText(contact?.relationship)}
+                                </span>
+
+                                <span style={participantMedicalDetailTextStyle}>
+                                  Teléfono: {renderMedicalText(contact?.phone)}
+                                </span>
+
+                                <span style={participantMedicalDetailTextStyle}>
+                                  Presente en el evento:{" "}
+                                  {contact?.present_at_event === true ? "Sí" : "No"}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {medicalProfile && (
+                        <div style={participantMedicalSectionStyle}>
+                          <strong style={participantMedicalSectionTitleStyle}>
+                            Cobertura y traslado
+                          </strong>
                         <div style={participantMedicalGridStyle}>
                           <div style={participantMedicalFieldStyle}>
                             <span style={participantMedicalFieldLabelStyle}>Servicio médico</span>
@@ -2365,7 +2413,9 @@ export default function EventParticipantProtectionConfig({ session }) {
                           </div>
                         </div>
                       </div>
+                      )}
 
+                      {medicalProfile && (
                       <div style={participantMedicalSectionStyle}>
                         <strong style={participantMedicalSectionTitleStyle}>
                           Seguridad del participante
@@ -2383,6 +2433,7 @@ export default function EventParticipantProtectionConfig({ session }) {
                           </div>
                         </div>
                       </div>
+                      )}
 
                       <div style={participantMedicalAuditStyle}>
                         Consulta realizada mediante acceso protegido y registrada en auditoría.

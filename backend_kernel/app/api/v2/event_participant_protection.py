@@ -476,6 +476,30 @@ def get_participant_medical_profile(
         .first()
     )
 
+    emergency_contacts = (
+        db.query(EventParticipantEmergencyContact)
+        .filter(
+            EventParticipantEmergencyContact.company_id == company_id,
+            EventParticipantEmergencyContact.participant_id == participant.id,
+        )
+        .order_by(
+            EventParticipantEmergencyContact.contact_order.asc(),
+            EventParticipantEmergencyContact.created_at.asc(),
+        )
+        .all()
+    )
+
+    emergency_contacts_out = [
+        {
+            "contact_order": contact.contact_order,
+            "name": contact.name,
+            "relationship": contact.relationship,
+            "phone": contact.phone,
+            "present_at_event": contact.present_at_event,
+        }
+        for contact in emergency_contacts
+    ]
+
     _register_access(
         db,
         company_id=company_id,
@@ -491,6 +515,7 @@ def get_participant_medical_profile(
         return {
             "participant_id": str(participant.id),
             "profile": None,
+            "emergency_contacts": emergency_contacts_out,
             "declared_by_participant": True,
         }
 
@@ -518,6 +543,7 @@ def get_participant_medical_profile(
             "protective_equipment_json": profile.protective_equipment_json or [],
             "declared_at": profile.declared_at,
         },
+        "emergency_contacts": emergency_contacts_out,
         "declared_by_participant": True,
     }
 
