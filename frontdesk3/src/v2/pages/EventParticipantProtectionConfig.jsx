@@ -101,6 +101,9 @@ export default function EventParticipantProtectionConfig({ session }) {
   const [participantSearch, setParticipantSearch] = useState("");
   const [participantFilter, setParticipantFilter] = useState("TODOS");
   const [selectedParticipant, setSelectedParticipant] = useState(null);
+  const [medicalProfile, setMedicalProfile] = useState(null);
+  const [medicalProfileState, setMedicalProfileState] = useState("idle");
+  const [medicalProfileError, setMedicalProfileError] = useState("");
   const [activeSection, setActiveSection] = useState("resumen");
 
   const publicUrl = useMemo(() => {
@@ -401,6 +404,105 @@ export default function EventParticipantProtectionConfig({ session }) {
   const openPublicPreview = () => {
     if (!publicUrl) return;
     window.open(publicUrl, "_blank", "noopener,noreferrer");
+  };
+
+  const resetMedicalProfile = () => {
+    setMedicalProfile(null);
+    setMedicalProfileState("idle");
+    setMedicalProfileError("");
+  };
+
+  const openParticipant = (participant) => {
+    resetMedicalProfile();
+    setSelectedParticipant(participant);
+  };
+
+  const closeParticipant = () => {
+    resetMedicalProfile();
+    setSelectedParticipant(null);
+  };
+
+  const consultMedicalProfile = async () => {
+    if (!selectedParticipant?.id || medicalProfileState === "loading") return;
+
+    try {
+      setMedicalProfileState("loading");
+      setMedicalProfileError("");
+      setMedicalProfile(null);
+
+      const result = await participantProtectionApi.medicalProfile({
+        intakeId,
+        participantId: selectedParticipant.id,
+        token: session?.token,
+        companyId: session?.companyId,
+        userId: session?.userId,
+      });
+
+      setMedicalProfile(result?.profile || null);
+      setMedicalProfileState(result?.profile ? "loaded" : "empty");
+    } catch (medicalError) {
+      setMedicalProfile(null);
+
+      if (medicalError?.status === 403) {
+        setMedicalProfileState("forbidden");
+        setMedicalProfileError(
+          medicalError?.message ||
+            "No tienes autorización para consultar información médica sensible."
+        );
+      } else {
+        setMedicalProfileState("error");
+        setMedicalProfileError(
+          medicalError?.message ||
+            "No fue posible consultar la información médica."
+        );
+      }
+    }
+  };
+
+  const humanizeMedicalValue = (value) => {
+    const clean = String(value ?? "").trim();
+    if (!clean) return "No declarado";
+    if (!clean.includes("_")) return clean;
+
+    const spaced = clean.replace(/_/g, " ").replace(/\s+/g, " ").trim();
+    return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+  };
+
+  const renderMedicalList = (value) => {
+    if (!Array.isArray(value) || value.length === 0) return "No declarado";
+
+    return value
+      .map((item) => {
+        if (item === null || item === undefined) return "";
+        if (typeof item === "string") {
+          return humanizeMedicalValue(item);
+        }
+        if (typeof item === "number") {
+          return String(item);
+        }
+        if (typeof item === "object") {
+          return Object.values(item)
+            .filter((part) => part !== null && part !== undefined && part !== "")
+            .map((part) =>
+              typeof part === "string" ? humanizeMedicalValue(part) : String(part)
+            )
+            .join(" · ");
+        }
+        return String(item);
+      })
+      .filter(Boolean)
+      .join(", ") || "No declarado";
+  };
+
+  const renderMedicalBoolean = (value) => {
+    if (value === true) return "Sí";
+    if (value === false) return "No";
+    return "No declarado";
+  };
+
+  const renderMedicalText = (value) => {
+    const clean = String(value ?? "").trim();
+    return clean || "No declarado";
   };
 
   if (loading) return <div style={{ padding: 24 }}>Cargando configuración...</div>;
@@ -1110,7 +1212,7 @@ export default function EventParticipantProtectionConfig({ session }) {
 
                         <button
                           type="button"
-                          onClick={() => setSelectedParticipant(participant)}
+                          onClick={() => openParticipant(participant)}
                           style={participantViewButtonStyle}
                         >
                           Ver ficha
@@ -1128,7 +1230,7 @@ export default function EventParticipantProtectionConfig({ session }) {
               style={participantModalBackdropStyle}
               onMouseDown={(e) => {
                 if (e.target === e.currentTarget) {
-                  setSelectedParticipant(null);
+                  closeParticipant();
                 }
               }}
             >
@@ -1157,7 +1259,7 @@ export default function EventParticipantProtectionConfig({ session }) {
 
                   <button
                     type="button"
-                    onClick={() => setSelectedParticipant(null)}
+                    onClick={closeParticipant}
                     style={participantModalCloseStyle}
                     aria-label="Cerrar ficha"
                   >
@@ -1318,19 +1420,202 @@ export default function EventParticipantProtectionConfig({ session }) {
                   </strong>
                 </div>
 
-                <div style={participantMedicalPlaceholderStyle}>
-                  <div>
-                    <strong>Información médica protegida</strong>
-
-                    <div style={participantMedicalHelpStyle}>
-                      Los antecedentes médicos están separados de esta
-                      ficha administrativa y requieren acceso autorizado.
+                <div style={participantMedicalPanelStyle}>
+                  <div style={participantMedicalHeaderStyle}>
+                    <div>
+                      <span style={participantMedicalEyebrowStyle}>
+                        Acceso protegido
+                      </span>
+                      <strong style={participantMedicalTitleStyle}>
+                        Información médica declarada por el participante
+                      </strong>
+                      <div style={participantMedicalHelpStyle}>
+                        Estos antecedentes fueron declarados por el participante.
+                        No sustituyen una valoración clínica. La consulta está
+                        restringida a personal autorizado y queda registrada en auditoría.
+                      </div>
                     </div>
+
+                    {medicalProfileState === "idle" && (
+                      <span style={participantMedicalLockStyle}>Protegida</span>
+                    )}
                   </div>
 
-                  <span style={participantMedicalLockStyle}>
-                    Protegida
-                  </span>
+                  {medicalProfileState === "idle" && (
+                    <button
+                      type="button"
+                      onClick={consultMedicalProfile}
+                      style={participantMedicalConsultButtonStyle}
+                    >
+                      Consultar información médica
+                    </button>
+                  )}
+
+                  {medicalProfileState === "loading" && (
+                    <div style={participantMedicalStatusStyle}>
+                      Consultando información médica protegida...
+                    </div>
+                  )}
+
+                  {medicalProfileState === "forbidden" && (
+                    <div style={participantMedicalForbiddenStyle}>
+                      <strong>Acceso restringido</strong>
+                      <span>{medicalProfileError}</span>
+                    </div>
+                  )}
+
+                  {medicalProfileState === "error" && (
+                    <div style={participantMedicalErrorStyle}>
+                      <strong>No fue posible realizar la consulta</strong>
+                      <span>{medicalProfileError}</span>
+                      <button
+                        type="button"
+                        onClick={consultMedicalProfile}
+                        style={participantMedicalRetryButtonStyle}
+                      >
+                        Reintentar
+                      </button>
+                    </div>
+                  )}
+
+                  {medicalProfileState === "empty" && (
+                    <div style={participantMedicalEmptyStyle}>
+                      El participante cuenta con autorización vigente, pero no tiene
+                      un perfil médico registrado.
+                    </div>
+                  )}
+
+                  {medicalProfileState === "loaded" && medicalProfile && (
+                    <div style={participantMedicalContentStyle}>
+                      <div style={participantMedicalAlertGridStyle}>
+                        <div style={participantMedicalAlertItemStyle}>
+                          <span style={participantMedicalFieldLabelStyle}>
+                            Tipo de sangre
+                          </span>
+                          <strong>{renderMedicalText(medicalProfile.blood_type)}</strong>
+                        </div>
+
+                        <div style={participantMedicalAlertItemStyle}>
+                          <span style={participantMedicalFieldLabelStyle}>
+                            Alergias
+                          </span>
+                          <strong>{renderMedicalList(medicalProfile.allergies_json)}</strong>
+                          {medicalProfile.allergies_detail && (
+                            <span style={participantMedicalDetailTextStyle}>
+                              {medicalProfile.allergies_detail}
+                            </span>
+                          )}
+                        </div>
+
+                        <div style={participantMedicalAlertItemStyle}>
+                          <span style={participantMedicalFieldLabelStyle}>
+                            Anticoagulantes
+                          </span>
+                          <strong>
+                            {renderMedicalBoolean(medicalProfile.uses_anticoagulants)}
+                          </strong>
+                        </div>
+
+                        <div style={participantMedicalAlertItemStyle}>
+                          <span style={participantMedicalFieldLabelStyle}>
+                            Notas de emergencia
+                          </span>
+                          <strong>{renderMedicalText(medicalProfile.emergency_notes)}</strong>
+                        </div>
+                      </div>
+
+                      <div style={participantMedicalSectionStyle}>
+                        <strong style={participantMedicalSectionTitleStyle}>
+                          Antecedentes y tratamiento
+                        </strong>
+                        <div style={participantMedicalGridStyle}>
+                          <div style={participantMedicalFieldStyle}>
+                            <span style={participantMedicalFieldLabelStyle}>Padecimientos</span>
+                            <strong>{renderMedicalList(medicalProfile.conditions_json)}</strong>
+                            {medicalProfile.conditions_detail && (
+                              <span style={participantMedicalDetailTextStyle}>
+                                {medicalProfile.conditions_detail}
+                              </span>
+                            )}
+                          </div>
+                          <div style={participantMedicalFieldStyle}>
+                            <span style={participantMedicalFieldLabelStyle}>Medicamentos</span>
+                            <strong>{renderMedicalList(medicalProfile.medications_json)}</strong>
+                          </div>
+                          <div style={participantMedicalFieldStyle}>
+                            <span style={participantMedicalFieldLabelStyle}>Cirugías</span>
+                            <strong>{renderMedicalList(medicalProfile.surgeries_json)}</strong>
+                          </div>
+                          <div style={participantMedicalFieldStyle}>
+                            <span style={participantMedicalFieldLabelStyle}>Implantes</span>
+                            <strong>{renderMedicalList(medicalProfile.implants_json)}</strong>
+                          </div>
+                          <div style={participantMedicalFieldStyle}>
+                            <span style={participantMedicalFieldLabelStyle}>Lesión reciente</span>
+                            <strong>{renderMedicalText(medicalProfile.recent_injury_detail)}</strong>
+                          </div>
+                          <div style={participantMedicalFieldStyle}>
+                            <span style={participantMedicalFieldLabelStyle}>Equipo de protección</span>
+                            <strong>{renderMedicalList(medicalProfile.protective_equipment_json)}</strong>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={participantMedicalSectionStyle}>
+                        <strong style={participantMedicalSectionTitleStyle}>
+                          Cobertura y traslado
+                        </strong>
+                        <div style={participantMedicalGridStyle}>
+                          <div style={participantMedicalFieldStyle}>
+                            <span style={participantMedicalFieldLabelStyle}>Servicio médico</span>
+                            <strong>{humanizeMedicalValue(medicalProfile.medical_service_type)}</strong>
+                          </div>
+                          <div style={participantMedicalFieldStyle}>
+                            <span style={participantMedicalFieldLabelStyle}>Aseguradora</span>
+                            <strong>{renderMedicalText(medicalProfile.insurer_name)}</strong>
+                          </div>
+                          <div style={participantMedicalFieldStyle}>
+                            <span style={participantMedicalFieldLabelStyle}>Póliza</span>
+                            <strong>{renderMedicalText(medicalProfile.policy_number)}</strong>
+                          </div>
+                          <div style={participantMedicalFieldStyle}>
+                            <span style={participantMedicalFieldLabelStyle}>Afiliación</span>
+                            <strong>{renderMedicalText(medicalProfile.affiliation_number)}</strong>
+                          </div>
+                          <div style={participantMedicalFieldStyle}>
+                            <span style={participantMedicalFieldLabelStyle}>Preferencia de traslado</span>
+                            <strong>{humanizeMedicalValue(medicalProfile.transfer_preference)}</strong>
+                          </div>
+                          <div style={participantMedicalFieldStyle}>
+                            <span style={participantMedicalFieldLabelStyle}>Hospital preferido</span>
+                            <strong>{renderMedicalText(medicalProfile.preferred_hospital)}</strong>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={participantMedicalSectionStyle}>
+                        <strong style={participantMedicalSectionTitleStyle}>
+                          Seguridad del participante
+                        </strong>
+                        <div style={participantMedicalGridStyle}>
+                          <div style={participantMedicalFieldStyle}>
+                            <span style={participantMedicalFieldLabelStyle}>
+                              Autorización para cortar traje/equipo
+                            </span>
+                            <strong>{renderMedicalBoolean(medicalProfile.suit_cut_authorized)}</strong>
+                          </div>
+                          <div style={participantMedicalFieldStyle}>
+                            <span style={participantMedicalFieldLabelStyle}>Declarado el</span>
+                            <strong>{formatParticipantDate(medicalProfile.declared_at)}</strong>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={participantMedicalAuditStyle}>
+                        Consulta realizada mediante acceso protegido y registrada en auditoría.
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -2207,25 +2492,48 @@ const participantUpdateStyle = {
   fontSize: 12,
 };
 
-const participantMedicalPlaceholderStyle = {
+const participantMedicalPanelStyle = {
   marginTop: 18,
-  padding: 14,
-  borderRadius: 14,
-  border: "1px solid #dce7ed",
-  background: "#f6fafc",
-  display: "flex",
-  flexWrap: "wrap",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 12,
+  padding: 16,
+  borderRadius: 16,
+  border: "1px solid #d7e4eb",
+  background: "#f8fbfd",
+  display: "grid",
+  gap: 14,
   color: "#315b79",
 };
 
+const participantMedicalHeaderStyle = {
+  display: "flex",
+  flexWrap: "wrap",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 12,
+};
+
+const participantMedicalEyebrowStyle = {
+  display: "block",
+  marginBottom: 4,
+  color: "#6b8799",
+  fontSize: 10,
+  fontWeight: 850,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+};
+
+const participantMedicalTitleStyle = {
+  display: "block",
+  color: "#173e59",
+  fontSize: 15,
+};
+
 const participantMedicalHelpStyle = {
-  marginTop: 3,
+  maxWidth: 610,
+  marginTop: 4,
   color: "#748b9c",
   fontSize: 12,
   fontWeight: 400,
+  lineHeight: 1.5,
 };
 
 const participantMedicalLockStyle = {
@@ -2235,6 +2543,145 @@ const participantMedicalLockStyle = {
   color: "#496b83",
   fontSize: 11,
   fontWeight: 850,
+};
+
+const participantMedicalConsultButtonStyle = {
+  justifySelf: "start",
+  border: 0,
+  borderRadius: 11,
+  padding: "10px 14px",
+  background: "#315b79",
+  color: "#fff",
+  fontSize: 12,
+  fontWeight: 800,
+  cursor: "pointer",
+};
+
+const participantMedicalStatusStyle = {
+  padding: 12,
+  borderRadius: 11,
+  background: "#edf5fa",
+  color: "#496b83",
+  fontSize: 12,
+  fontWeight: 700,
+};
+
+const participantMedicalForbiddenStyle = {
+  display: "grid",
+  gap: 4,
+  padding: 12,
+  borderRadius: 11,
+  border: "1px solid #ecd9b2",
+  background: "#fff8e8",
+  color: "#785b18",
+  fontSize: 12,
+};
+
+const participantMedicalErrorStyle = {
+  display: "grid",
+  gap: 7,
+  padding: 12,
+  borderRadius: 11,
+  border: "1px solid #efcccc",
+  background: "#fff1f1",
+  color: "#8d3030",
+  fontSize: 12,
+};
+
+const participantMedicalRetryButtonStyle = {
+  justifySelf: "start",
+  border: "1px solid #e2bcbc",
+  borderRadius: 9,
+  padding: "7px 10px",
+  background: "#fff",
+  color: "#8d3030",
+  fontSize: 11,
+  fontWeight: 800,
+  cursor: "pointer",
+};
+
+const participantMedicalEmptyStyle = {
+  padding: 12,
+  borderRadius: 11,
+  background: "#f1f5f7",
+  color: "#667f91",
+  fontSize: 12,
+};
+
+const participantMedicalContentStyle = {
+  display: "grid",
+  gap: 14,
+};
+
+const participantMedicalAlertGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gap: 9,
+};
+
+const participantMedicalAlertItemStyle = {
+  display: "grid",
+  alignContent: "start",
+  gap: 4,
+  padding: 12,
+  borderRadius: 12,
+  border: "1px solid #e5d9bd",
+  background: "#fffaf0",
+  color: "#574b2f",
+  fontSize: 12,
+  overflowWrap: "anywhere",
+};
+
+const participantMedicalSectionStyle = {
+  display: "grid",
+  gap: 9,
+  paddingTop: 2,
+};
+
+const participantMedicalSectionTitleStyle = {
+  color: "#315b79",
+  fontSize: 12,
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+};
+
+const participantMedicalGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gap: 8,
+};
+
+const participantMedicalFieldStyle = {
+  display: "grid",
+  alignContent: "start",
+  gap: 3,
+  padding: 11,
+  borderRadius: 11,
+  background: "#fff",
+  border: "1px solid #e3ebf0",
+  color: "#315b79",
+  fontSize: 12,
+  overflowWrap: "anywhere",
+};
+
+const participantMedicalFieldLabelStyle = {
+  color: "#7890a1",
+  fontSize: 10,
+  fontWeight: 750,
+};
+
+const participantMedicalDetailTextStyle = {
+  color: "#708899",
+  fontSize: 11,
+  lineHeight: 1.4,
+};
+
+const participantMedicalAuditStyle = {
+  paddingTop: 10,
+  borderTop: "1px solid #dfe8ed",
+  color: "#72899a",
+  fontSize: 10,
+  lineHeight: 1.45,
 };
 
 const participantsStyle = {

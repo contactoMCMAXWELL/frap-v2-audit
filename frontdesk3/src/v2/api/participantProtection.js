@@ -97,6 +97,23 @@ export const participantProtectionApi = {
       companyId,
       userId,
     }),
+  medicalProfile: async ({
+    intakeId,
+    participantId,
+    token,
+    companyId,
+    userId,
+  }) =>
+    request(
+      `/v2/event-participant-protection/${encodeURIComponent(
+        intakeId
+      )}/participants/${encodeURIComponent(participantId)}/medical-profile`,
+      {
+        token,
+        companyId,
+        userId,
+      }
+    ),
 
   publicEvent: async ({ publicToken }) =>
     request(`/v2/public/events/${encodeURIComponent(publicToken)}`),
