@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { v2Api } from "../api/v2";
 import { participantProtectionApi } from "../api/participantProtection";
 
@@ -88,6 +88,7 @@ function formatParticipantDate(value) {
 
 export default function EventParticipantProtectionConfig({ session }) {
   const { intakeId } = useParams();
+  const navigate = useNavigate();
   const [intake, setIntake] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [saved, setSaved] = useState(null);
@@ -420,6 +421,17 @@ export default function EventParticipantProtectionConfig({ session }) {
   const closeParticipant = () => {
     resetMedicalProfile();
     setSelectedParticipant(null);
+  };
+
+  const startParticipantAttention = () => {
+    if (!selectedParticipant?.id || !intakeId) return;
+
+    const params = new URLSearchParams({
+      parentIntakeId: intakeId,
+      participantId: selectedParticipant.id,
+    });
+
+    navigate(`/v2/intakes/nuevo?${params.toString()}`);
   };
 
   const consultMedicalProfile = async () => {
@@ -1418,6 +1430,30 @@ export default function EventParticipantProtectionConfig({ session }) {
                         selectedParticipant.updated_at
                     )}
                   </strong>
+                </div>
+
+                <div style={participantAttentionPanelStyle}>
+                  <div>
+                    <span style={participantAttentionEyebrowStyle}>
+                      Operación del evento
+                    </span>
+                    <strong style={participantAttentionTitleStyle}>
+                      Iniciar atención para este participante
+                    </strong>
+                    <div style={participantAttentionHelpStyle}>
+                      Abre el flujo operativo normal de AmbulanciaYA y crea un servicio hijo
+                      de esta guardia. La ficha médica no se copia al FRAP; permanece como
+                      información declarada de referencia y con acceso protegido.
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={startParticipantAttention}
+                    style={participantAttentionButtonStyle}
+                  >
+                    Iniciar atención
+                  </button>
                 </div>
 
                 <div style={participantMedicalPanelStyle}>
@@ -2490,6 +2526,54 @@ const participantUpdateStyle = {
   marginTop: 14,
   color: "#6e8596",
   fontSize: 12,
+};
+
+const participantAttentionPanelStyle = {
+  marginTop: 18,
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 14,
+  padding: 16,
+  borderRadius: 16,
+  border: "1px solid #cfe1ed",
+  background: "#f2f8fc",
+};
+
+const participantAttentionEyebrowStyle = {
+  display: "block",
+  marginBottom: 4,
+  color: "#5f8198",
+  fontSize: 10,
+  fontWeight: 850,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+};
+
+const participantAttentionTitleStyle = {
+  display: "block",
+  color: "#173e59",
+  fontSize: 15,
+};
+
+const participantAttentionHelpStyle = {
+  maxWidth: 520,
+  marginTop: 4,
+  color: "#6f8798",
+  fontSize: 12,
+  lineHeight: 1.5,
+};
+
+const participantAttentionButtonStyle = {
+  border: 0,
+  borderRadius: 11,
+  padding: "11px 15px",
+  background: "#315b79",
+  color: "#fff",
+  fontSize: 12,
+  fontWeight: 850,
+  cursor: "pointer",
 };
 
 const participantMedicalPanelStyle = {
