@@ -92,6 +92,7 @@ class ParticipantCreatedOut(BaseModel):
     participant_token: str
     status: str
 
+
 class PublicEmergencyContactInput(BaseModel):
     contact_order: int = Field(default=1, ge=1, le=2)
     name: str = Field(min_length=1, max_length=180)
@@ -185,3 +186,20 @@ class ParticipantCompletedOut(BaseModel):
     participant_token: str
     status: str
     profile_completed_at: datetime
+
+
+class ParticipantServiceLinkCreate(BaseModel):
+    participant_id: UUID
+    intake_id: UUID
+
+
+class ParticipantServiceLinkOut(BaseModel):
+    id: UUID
+    company_id: UUID
+    participant_id: UUID
+    intake_id: UUID
+    created_by_user_id: Optional[UUID] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

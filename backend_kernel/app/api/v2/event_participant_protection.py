@@ -17,6 +17,7 @@ from app.models.event_participant_protection import (
     EventParticipantEmergencyContact,
     EventParticipantMedicalProfile,
     EventParticipantProtection,
+    EventParticipantServiceLink,
 )
 from app.models.service_intake_v2 import ServiceIntakeV2
 from app.schemas.v2.event_participant_protection import (
@@ -24,6 +25,8 @@ from app.schemas.v2.event_participant_protection import (
     EventProtectionUpsert,
     ParticipantCompletedOut,
     ParticipantCreatedOut,
+    ParticipantServiceLinkCreate,
+    ParticipantServiceLinkOut,
     PublicParticipantSelfOut,
     ParticipantPrivateOut,
     PublicEventProtectionOut,
@@ -261,6 +264,107 @@ def list_event_participants(
         .order_by(EventParticipant.created_at.asc())
         .all()
     )
+
+
+@router.post(
+    "/v2/event-participant-protection/{intake_id}/participant-service-links",
+    response_model=ParticipantServiceLinkOut,
+    status_code=201,
+)
+def create_participant_service_link(
+    intake_id: UUID,
+    payload: ParticipantServiceLinkCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    company_id: UUID = Depends(get_company_id),
+    user=Depends(get_current_user),
+):
+    protection, participant = _participant_for_event_or_404(
+        db,
+        company_id,
+        intake_id,
+        payload.participant_id,
+    )
+
+    service = (
+        db.query(ServiceIntakeV2)
+        .filter(
+            ServiceIntakeV2.id == payload.intake_id,
+            ServiceIntakeV2.company_id == company_id,
+        )
+        .first()
+    )
+    if not service:
+        raise HTTPException(status_code=404, detail="Servicio no encontrado")
+
+    if str(service.operation_mode or "").strip().lower() == "standby":
+        raise HTTPException(
+            status_code=409,
+            detail="La guardia/evento raíz no puede vincularse como atención de un participante",
+        )
+
+    if service.parent_intake_id != intake_id:
+        raise HTTPException(
+            status_code=409,
+            detail="El servicio no pertenece a esta guardia/evento",
+        )
+
+    existing = (
+        db.query(EventParticipantServiceLink)
+        .filter(
+            EventParticipantServiceLink.company_id == company_id,
+            EventParticipantServiceLink.intake_id == service.id,
+        )
+        .first()
+    )
+    if existing:
+        if existing.participant_id == participant.id:
+            return existing
+        raise HTTPException(
+            status_code=409,
+            detail="El servicio ya está vinculado a otro participante",
+        )
+
+    row = EventParticipantServiceLink(
+        company_id=company_id,
+        participant_id=participant.id,
+        intake_id=service.id,
+        created_by_user_id=getattr(user, "id", None),
+    )
+
+    try:
+        db.add(row)
+        db.flush()
+
+        role = str(getattr(user, "role", "") or "").upper()
+        db.add(
+            EventParticipantAccessLog(
+                company_id=company_id,
+                participant_id=participant.id,
+                user_id=getattr(user, "id", None),
+                action="LINK_SERVICE",
+                resource="service_link",
+                reason="Vinculación de participante con servicio del evento",
+                ip_address=_request_ip(request),
+                user_agent=(request.headers.get("user-agent") or "")[:500] or None,
+                extra_json={
+                    "actor_name": getattr(user, "name", None),
+                    "actor_email": getattr(user, "email", None),
+                    "actor_role": role,
+                    "protection_id": str(protection.id),
+                    "event_intake_id": str(protection.intake_id),
+                    "service_intake_id": str(service.id),
+                },
+            )
+        )
+
+        db.commit()
+        db.refresh(row)
+    except Exception:
+        db.rollback()
+        raise
+
+    return row
 
 
 @router.get(

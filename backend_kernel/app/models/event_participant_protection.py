@@ -181,3 +181,43 @@ class EventParticipantAccessLog(Base):
     user_agent: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     extra_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     created_at = created_at_col()
+
+class EventParticipantServiceLink(Base):
+    """Vínculo entre un participante registrado y un servicio hijo del evento."""
+
+    __tablename__ = "event_participant_service_link"
+    __table_args__ = (
+        UniqueConstraint(
+            "intake_id",
+            name="uq_event_participant_service_link_intake",
+        ),
+    )
+
+    id = uuid_pk()
+
+    company_id = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    participant_id = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("event_participant.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    intake_id = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("service_intake_v2.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_by_user_id = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    created_at = created_at_col()
