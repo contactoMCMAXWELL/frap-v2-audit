@@ -152,6 +152,160 @@ function formatPrivacyDate(value) {
   }
 }
 
+function participantStorageKey(publicToken) {
+  return `ambulanciaya:participante:${publicToken}`;
+}
+
+function readPendingRegistration(publicToken) {
+  try {
+    const raw = window.localStorage.getItem(participantStorageKey(publicToken));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.participant_token) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function savePendingRegistration(publicToken, participantToken, lastStep = 1) {
+  try {
+    const current = readPendingRegistration(publicToken) || {};
+    window.localStorage.setItem(
+      participantStorageKey(publicToken),
+      JSON.stringify({
+        participant_token: participantToken,
+        started_at: current.started_at || new Date().toISOString(),
+        last_step: Math.max(0, Math.min(Number(lastStep) || 0, 4)),
+      })
+    );
+  } catch {
+    // El registro sigue existiendo en servidor aunque el navegador no permita almacenamiento local.
+  }
+}
+
+function clearPendingRegistration(publicToken) {
+  try {
+    window.localStorage.removeItem(participantStorageKey(publicToken));
+  } catch {
+    // Sin acción adicional.
+  }
+}
+
+function nullableTrim(value) {
+  const text = String(value ?? "").trim();
+  return text || null;
+}
+
+function formFromParticipant(data) {
+  const profile = data?.medical_profile || {};
+  const contacts = Array.isArray(data?.emergency_contacts) && data.emergency_contacts.length
+    ? data.emergency_contacts.slice(0, 2).map((contact, index) => ({
+        contact_order: index + 1,
+        name: contact?.name || "",
+        relationship: contact?.relationship || "",
+        phone: contact?.phone || "",
+        present_at_event: Boolean(contact?.present_at_event),
+      }))
+    : [blankContact(1)];
+
+  return {
+    ...initialForm,
+    participant_number: data?.participant_number || "",
+    first_name: data?.first_name || "",
+    paternal_surname: data?.paternal_surname || "",
+    maternal_surname: data?.maternal_surname || "",
+    birth_date: String(data?.birth_date || "").slice(0, 10),
+    phone: data?.phone || "",
+    email: data?.email || "",
+    state_origin: data?.state_origin || "",
+    city_origin: data?.city_origin || "",
+    category: data?.category || "",
+    team_name: data?.team_name || "",
+    vehicle_type: data?.vehicle_type || "",
+    vehicle_number: data?.vehicle_number || "",
+    vehicle_make_model: data?.vehicle_make_model || "",
+    vehicle_color: data?.vehicle_color || "",
+    vehicle_plates: data?.vehicle_plates || "",
+    emergency_contacts: contacts,
+    medical_profile: {
+      ...initialForm.medical_profile,
+      ...profile,
+      blood_type: profile?.blood_type || "",
+      allergies_detail: profile?.allergies_detail || "",
+      conditions_detail: profile?.conditions_detail || "",
+      recent_injury_detail: profile?.recent_injury_detail || "",
+      medical_service_type: profile?.medical_service_type || "",
+      insurer_name: profile?.insurer_name || "",
+      policy_number: profile?.policy_number || "",
+      affiliation_number: profile?.affiliation_number || "",
+      transfer_preference: profile?.transfer_preference || "",
+      preferred_hospital: profile?.preferred_hospital || "",
+      emergency_notes: profile?.emergency_notes || "",
+      allergies_json: Array.isArray(profile?.allergies_json) ? profile.allergies_json : [],
+      conditions_json: Array.isArray(profile?.conditions_json) ? profile.conditions_json : [],
+      medications_json: Array.isArray(profile?.medications_json) ? profile.medications_json : [],
+      surgeries_json: Array.isArray(profile?.surgeries_json) ? profile.surgeries_json : [],
+      implants_json: Array.isArray(profile?.implants_json) ? profile.implants_json : [],
+      protective_equipment_json: Array.isArray(profile?.protective_equipment_json)
+        ? profile.protective_equipment_json
+        : [],
+    },
+    privacy_notice_accepted: false,
+    sensitive_data_authorized: false,
+    information_confirmed: false,
+  };
+}
+
+function participantProgressBasePayload(form) {
+  return {
+    participant_number: form.participant_number.trim() || null,
+    first_name: form.first_name.trim(),
+    paternal_surname: form.paternal_surname.trim(),
+    maternal_surname: form.maternal_surname.trim() || null,
+    birth_date: form.birth_date || null,
+    phone: form.phone.trim() || null,
+    email: form.email.trim() || null,
+    state_origin: form.state_origin.trim() || null,
+    city_origin: form.city_origin.trim() || null,
+    category: form.category.trim() || null,
+    team_name: form.team_name.trim() || null,
+    vehicle_type: form.vehicle_type.trim() || null,
+    vehicle_number: form.vehicle_number.trim() || null,
+    vehicle_make_model: form.vehicle_make_model.trim() || null,
+    vehicle_color: form.vehicle_color.trim() || null,
+    vehicle_plates: form.vehicle_plates.trim() || null,
+  };
+}
+
+function participantContactsPayload(form) {
+  return form.emergency_contacts.map((contact, index) => ({
+    ...contact,
+    contact_order: index + 1,
+    name: contact.name.trim(),
+    relationship: contact.relationship.trim(),
+    phone: contact.phone.trim(),
+  }));
+}
+
+function participantMedicalPayload(form) {
+  const medical = form.medical_profile;
+  return {
+    ...medical,
+    blood_type: medical.blood_type === "No lo sé" ? null : (medical.blood_type || null),
+    allergies_detail: nullableTrim(medical.allergies_detail),
+    conditions_detail: nullableTrim(medical.conditions_detail),
+    recent_injury_detail: nullableTrim(medical.recent_injury_detail),
+    medical_service_type: medical.medical_service_type || null,
+    insurer_name: nullableTrim(medical.insurer_name),
+    policy_number: nullableTrim(medical.policy_number),
+    affiliation_number: nullableTrim(medical.affiliation_number),
+    transfer_preference: nullableTrim(medical.transfer_preference),
+    preferred_hospital: nullableTrim(medical.preferred_hospital),
+    emergency_notes: nullableTrim(medical.emergency_notes),
+  };
+}
+
 export default function PublicEventParticipantLanding() {
   const { publicToken } = useParams();
   const [event, setEvent] = useState(null);
@@ -167,6 +321,51 @@ export default function PublicEventParticipantLanding() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [pendingParticipant, setPendingParticipant] = useState(null);
+  const [pendingRegistrationLoading, setPendingRegistrationLoading] = useState(true);
+
+
+  useEffect(() => {
+    let mounted = true;
+    setPendingRegistrationLoading(true);
+    const savedRegistration = readPendingRegistration(publicToken);
+    const participantToken = savedRegistration?.participant_token;
+
+    if (!participantToken) {
+      setPendingParticipant(null);
+      setPendingRegistrationLoading(false);
+      return () => { mounted = false; };
+    }
+
+    participantProtectionApi.publicParticipant({
+      publicToken,
+      participantToken,
+    })
+      .then((data) => {
+        if (!mounted) return;
+
+        if (String(data?.status || "").toUpperCase() === "INICIADO") {
+          setPendingParticipant(data);
+          return;
+        }
+
+        clearPendingRegistration(publicToken);
+        setPendingParticipant(null);
+      })
+      .catch((e) => {
+        if (!mounted) return;
+
+        if (e?.status === 404 || e?.status === 409) {
+          clearPendingRegistration(publicToken);
+          setPendingParticipant(null);
+        }
+      })
+      .finally(() => {
+        if (mounted) setPendingRegistrationLoading(false);
+      });
+
+    return () => { mounted = false; };
+  }, [publicToken]);
 
   useEffect(() => {
     let mounted = true;
@@ -247,6 +446,58 @@ export default function PublicEventParticipantLanding() {
   const surgeryText = useMemo(() => (medical.surgeries_json || []).join(", "), [medical.surgeries_json]);
   const implantText = useMemo(() => (medical.implants_json || []).join(", "), [medical.implants_json]);
 
+  const continuePendingRegistration = async () => {
+    const participantToken = pendingParticipant?.participant_token;
+    if (!participantToken) return;
+
+    try {
+      setSaving(true);
+      setError("");
+
+      const data = await participantProtectionApi.publicParticipant({
+        publicToken,
+        participantToken,
+      });
+
+      if (String(data?.status || "").toUpperCase() !== "INICIADO") {
+        clearPendingRegistration(publicToken);
+        setPendingParticipant(null);
+        setError("Este registro ya no está pendiente de completar.");
+        return;
+      }
+
+      const savedRegistration = readPendingRegistration(publicToken);
+      const resumeStep = Math.max(1, Math.min(Number(savedRegistration?.last_step) || 1, 4));
+
+      setParticipant(data);
+      setPendingParticipant(data);
+      setForm(formFromParticipant(data));
+      setStep(resumeStep);
+      setScreen("form");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (e) {
+      if (e?.status === 404 || e?.status === 409) {
+        clearPendingRegistration(publicToken);
+        setPendingParticipant(null);
+      }
+
+      setError(e?.message || "No fue posible recuperar tu registro pendiente.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const startNewRegistration = () => {
+    clearPendingRegistration(publicToken);
+    setPendingParticipant(null);
+    setParticipant(null);
+    setForm(initialForm);
+    setStep(0);
+    setError("");
+    setScreen("form");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const validateStep = () => {
     if (step === 0 && (!form.first_name.trim() || !form.paternal_surname.trim())) return "Escribe tu nombre y apellido paterno.";
     if (step === 1) {
@@ -264,12 +515,15 @@ export default function PublicEventParticipantLanding() {
   const next = async () => {
     const validation = validateStep();
     if (validation) return setError(validation);
+
+    setSaving(true);
     setError("");
 
-    if (step === 0 && !participant) {
-      try {
-        setSaving(true);
-        const result = await participantProtectionApi.publicRegister({
+    try {
+      let activeParticipant = participant;
+
+      if (step === 0 && !activeParticipant) {
+        const created = await participantProtectionApi.publicRegister({
           publicToken,
           payload: {
             participant_number: form.participant_number.trim() || null,
@@ -287,16 +541,47 @@ export default function PublicEventParticipantLanding() {
             vehicle_number: form.vehicle_number.trim() || null,
           },
         });
-        setParticipant(result);
-      } catch (e) {
-        setError(e?.message || "No fue posible iniciar tu registro.");
-        return;
-      } finally {
-        setSaving(false);
+
+        activeParticipant = created;
+        setParticipant(created);
+
+        if (created?.participant_token) {
+          savePendingRegistration(publicToken, created.participant_token, 1);
+          setPendingParticipant(created);
+        }
       }
+
+      if (!activeParticipant?.participant_token) {
+        throw new Error("No encontramos el registro iniciado. Vuelve a comenzar.");
+      }
+
+      const progressPayload = participantProgressBasePayload(form);
+
+      if (step >= 1) {
+        progressPayload.emergency_contacts = participantContactsPayload(form);
+      }
+
+      if (step >= 2) {
+        progressPayload.medical_profile = participantMedicalPayload(form);
+      }
+
+      const savedParticipant = await participantProtectionApi.publicSaveProgress({
+        publicToken,
+        participantToken: activeParticipant.participant_token,
+        payload: progressPayload,
+      });
+
+      const nextStep = Math.min(step + 1, 4);
+      savePendingRegistration(publicToken, activeParticipant.participant_token, nextStep);
+      setParticipant(savedParticipant);
+      setPendingParticipant(savedParticipant);
+      setStep(nextStep);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (e) {
+      setError(e?.message || "No fue posible guardar tu avance.");
+    } finally {
+      setSaving(false);
     }
-    setStep((s) => Math.min(s + 1, 4));
-    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const complete = async () => {
@@ -307,44 +592,12 @@ export default function PublicEventParticipantLanding() {
     setError("");
     try {
       const payload = {
-        ...form,
-        participant_number: form.participant_number.trim() || null,
-        first_name: form.first_name.trim(),
-        paternal_surname: form.paternal_surname.trim(),
-        maternal_surname: form.maternal_surname.trim() || null,
-        birth_date: form.birth_date || null,
-        phone: form.phone.trim() || null,
-        email: form.email.trim() || null,
-        state_origin: form.state_origin.trim() || null,
-        city_origin: form.city_origin.trim() || null,
-        category: form.category.trim() || null,
-        team_name: form.team_name.trim() || null,
-        vehicle_type: form.vehicle_type.trim() || null,
-        vehicle_number: form.vehicle_number.trim() || null,
-        vehicle_make_model: form.vehicle_make_model.trim() || null,
-        vehicle_color: form.vehicle_color.trim() || null,
-        vehicle_plates: form.vehicle_plates.trim() || null,
-        emergency_contacts: form.emergency_contacts.map((c, i) => ({
-          ...c,
-          contact_order: i + 1,
-          name: c.name.trim(),
-          relationship: c.relationship.trim(),
-          phone: c.phone.trim(),
-        })),
-        medical_profile: {
-          ...medical,
-          blood_type: medical.blood_type === "No lo sé" ? null : (medical.blood_type || null),
-          allergies_detail: medical.allergies_detail.trim() || null,
-          conditions_detail: medical.conditions_detail.trim() || null,
-          recent_injury_detail: medical.recent_injury_detail.trim() || null,
-          medical_service_type: medical.medical_service_type || null,
-          insurer_name: medical.insurer_name.trim() || null,
-          policy_number: medical.policy_number.trim() || null,
-          affiliation_number: medical.affiliation_number.trim() || null,
-          transfer_preference: medical.transfer_preference.trim() || null,
-          preferred_hospital: medical.preferred_hospital.trim() || null,
-          emergency_notes: medical.emergency_notes.trim() || null,
-        },
+        ...participantProgressBasePayload(form),
+        emergency_contacts: participantContactsPayload(form),
+        medical_profile: participantMedicalPayload(form),
+        privacy_notice_accepted: form.privacy_notice_accepted,
+        sensitive_data_authorized: form.sensitive_data_authorized,
+        information_confirmed: form.information_confirmed,
       };
       const result = await participantProtectionApi.publicComplete({
         publicToken,
@@ -352,6 +605,8 @@ export default function PublicEventParticipantLanding() {
         payload,
       });
       setParticipant(result);
+      clearPendingRegistration(publicToken);
+      setPendingParticipant(null);
       setScreen("done");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (e) {
@@ -428,7 +683,26 @@ export default function PublicEventParticipantLanding() {
             <article><span>03</span><strong>Acceso restringido</strong><p>Protección y consentimiento para datos sensibles.</p></article>
           </div>
           {eventOpen ? (
-            <button className="pp-primary pp-primary--hero" onClick={() => setScreen("form")}>Registrar mi ficha de seguridad <span>→</span></button>
+            pendingRegistrationLoading ? (
+              <div className="pp-warning">Revisando si tienes un registro pendiente…</div>
+            ) : pendingParticipant ? (
+              <div className="pp-warning">
+                <strong>Tienes un registro pendiente</strong>
+                <p>Puedes continuar la ficha que comenzaste anteriormente o iniciar un registro nuevo.</p>
+                <div className="pp-actions">
+                  <button type="button" className="pp-primary" onClick={continuePendingRegistration}>
+                    Continuar registro <span>→</span>
+                  </button>
+                  <button type="button" className="pp-secondary" onClick={startNewRegistration}>
+                    Iniciar uno nuevo
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button className="pp-primary pp-primary--hero" onClick={() => setScreen("form")}>
+                Registrar mi ficha de seguridad <span>→</span>
+              </button>
+            )
           ) : (
             <div className="pp-warning">El registro público de este evento está cerrado.</div>
           )}

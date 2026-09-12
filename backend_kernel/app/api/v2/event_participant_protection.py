@@ -35,6 +35,7 @@ from app.schemas.v2.event_participant_protection import (
     PublicEventProtectionOut,
     PublicParticipantComplete,
     PublicParticipantCreate,
+    PublicParticipantProgressUpdate,
 )
 
 router = APIRouter(tags=["v2-event-participant-protection"])
@@ -859,6 +860,146 @@ def get_public_participant(
             latest_consent and latest_consent.information_confirmed
         ),
     }
+
+
+@router.patch(
+    "/v2/public/events/{public_token}/participants/{participant_token}",
+    response_model=PublicParticipantSelfOut,
+)
+def update_public_participant_progress(
+    public_token: str,
+    participant_token: str,
+    payload: PublicParticipantProgressUpdate,
+    db: Session = Depends(get_db),
+):
+    protection = _protection_by_token(db, public_token)
+
+    now = datetime.now(timezone.utc)
+    if not protection.registration_open:
+        raise HTTPException(status_code=409, detail="El registro del evento está cerrado")
+    if protection.registration_deadline and now > protection.registration_deadline:
+        raise HTTPException(status_code=409, detail="El periodo de registro ha finalizado")
+
+    participant = (
+        db.query(EventParticipant)
+        .filter(
+            EventParticipant.company_id == protection.company_id,
+            EventParticipant.protection_id == protection.id,
+            EventParticipant.participant_token == participant_token,
+        )
+        .first()
+    )
+    if not participant:
+        raise HTTPException(status_code=404, detail="Participante no encontrado")
+
+    if str(participant.status or "").upper() != "INICIADO":
+        raise HTTPException(
+            status_code=409,
+            detail="Solo se puede guardar progresivamente una ficha en estado INICIADO",
+        )
+
+    first_name = payload.first_name.strip()
+    paternal_surname = payload.paternal_surname.strip()
+    if not first_name or not paternal_surname:
+        raise HTTPException(
+            status_code=422,
+            detail="Nombre y apellido paterno son obligatorios",
+        )
+
+    try:
+        participant.participant_number = (payload.participant_number or "").strip() or None
+        participant.first_name = first_name
+        participant.paternal_surname = paternal_surname
+        participant.maternal_surname = (payload.maternal_surname or "").strip() or None
+        participant.birth_date = payload.birth_date
+        participant.phone = (payload.phone or "").strip() or None
+        participant.email = (payload.email or "").strip() or None
+        participant.state_origin = (payload.state_origin or "").strip() or None
+        participant.city_origin = (payload.city_origin or "").strip() or None
+        participant.category = (payload.category or "").strip() or None
+        participant.team_name = (payload.team_name or "").strip() or None
+        participant.vehicle_type = (payload.vehicle_type or "").strip() or None
+        participant.vehicle_number = (payload.vehicle_number or "").strip() or None
+        participant.vehicle_make_model = (payload.vehicle_make_model or "").strip() or None
+        participant.vehicle_color = (payload.vehicle_color or "").strip() or None
+        participant.vehicle_plates = (payload.vehicle_plates or "").strip() or None
+        participant.last_participant_update_at = now
+
+        if payload.emergency_contacts is not None:
+            (
+                db.query(EventParticipantEmergencyContact)
+                .filter(
+                    EventParticipantEmergencyContact.company_id == protection.company_id,
+                    EventParticipantEmergencyContact.participant_id == participant.id,
+                )
+                .delete(synchronize_session=False)
+            )
+
+            for contact in sorted(
+                payload.emergency_contacts,
+                key=lambda item: item.contact_order,
+            ):
+                db.add(
+                    EventParticipantEmergencyContact(
+                        company_id=protection.company_id,
+                        participant_id=participant.id,
+                        contact_order=contact.contact_order,
+                        name=contact.name.strip(),
+                        relationship=contact.relationship.strip(),
+                        phone=contact.phone.strip(),
+                        present_at_event=contact.present_at_event,
+                    )
+                )
+
+        if payload.medical_profile is not None:
+            medical = payload.medical_profile
+            profile = (
+                db.query(EventParticipantMedicalProfile)
+                .filter(
+                    EventParticipantMedicalProfile.company_id == protection.company_id,
+                    EventParticipantMedicalProfile.participant_id == participant.id,
+                )
+                .first()
+            )
+            if not profile:
+                profile = EventParticipantMedicalProfile(
+                    company_id=protection.company_id,
+                    participant_id=participant.id,
+                )
+                db.add(profile)
+
+            profile.blood_type = (medical.blood_type or "").strip() or None
+            profile.allergies_json = medical.allergies_json
+            profile.allergies_detail = (medical.allergies_detail or "").strip() or None
+            profile.conditions_json = medical.conditions_json
+            profile.conditions_detail = (medical.conditions_detail or "").strip() or None
+            profile.medications_json = medical.medications_json
+            profile.uses_anticoagulants = medical.uses_anticoagulants
+            profile.surgeries_json = medical.surgeries_json
+            profile.recent_injury_detail = (medical.recent_injury_detail or "").strip() or None
+            profile.implants_json = medical.implants_json
+            profile.medical_service_type = (medical.medical_service_type or "").strip() or None
+            profile.insurer_name = (medical.insurer_name or "").strip() or None
+            profile.policy_number = (medical.policy_number or "").strip() or None
+            profile.affiliation_number = (medical.affiliation_number or "").strip() or None
+            profile.transfer_preference = (medical.transfer_preference or "").strip() or None
+            profile.preferred_hospital = (medical.preferred_hospital or "").strip() or None
+            profile.emergency_notes = (medical.emergency_notes or "").strip() or None
+            profile.suit_cut_authorized = medical.suit_cut_authorized
+            profile.protective_equipment_json = medical.protective_equipment_json
+            profile.declared_at = now
+
+        db.commit()
+
+    except Exception:
+        db.rollback()
+        raise
+
+    return get_public_participant(
+        public_token=public_token,
+        participant_token=participant_token,
+        db=db,
+    )
 
 
 @router.put(

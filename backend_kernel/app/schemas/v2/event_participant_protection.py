@@ -141,6 +141,28 @@ class PublicMedicalProfileInput(BaseModel):
     protective_equipment_json: list[Any] = Field(default_factory=list)
 
 
+class PublicParticipantProgressUpdate(BaseModel):
+    participant_number: Optional[str] = Field(default=None, max_length=50)
+    first_name: str = Field(min_length=1, max_length=100)
+    paternal_surname: str = Field(min_length=1, max_length=100)
+    maternal_surname: Optional[str] = Field(default=None, max_length=100)
+    birth_date: Optional[date] = None
+    phone: Optional[str] = Field(default=None, max_length=40)
+    email: Optional[str] = Field(default=None, max_length=180)
+    state_origin: Optional[str] = Field(default=None, max_length=100)
+    city_origin: Optional[str] = Field(default=None, max_length=120)
+    category: Optional[str] = Field(default=None, max_length=100)
+    team_name: Optional[str] = Field(default=None, max_length=120)
+    vehicle_type: Optional[str] = Field(default=None, max_length=60)
+    vehicle_number: Optional[str] = Field(default=None, max_length=50)
+    vehicle_make_model: Optional[str] = Field(default=None, max_length=150)
+    vehicle_color: Optional[str] = Field(default=None, max_length=60)
+    vehicle_plates: Optional[str] = Field(default=None, max_length=30)
+
+    emergency_contacts: Optional[list[PublicEmergencyContactInput]] = None
+    medical_profile: Optional[PublicMedicalProfileInput] = None
+
+
 class PublicParticipantComplete(BaseModel):
     participant_number: Optional[str] = Field(default=None, max_length=50)
     first_name: str = Field(min_length=1, max_length=100)

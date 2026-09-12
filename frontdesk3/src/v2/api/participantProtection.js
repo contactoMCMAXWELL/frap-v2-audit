@@ -271,6 +271,23 @@ export const participantProtectionApi = {
       )}`
     ),
 
+  publicSaveProgress: async ({
+    publicToken,
+    participantToken,
+    payload,
+  }) =>
+    request(
+      `/v2/public/events/${encodeURIComponent(
+        publicToken
+      )}/participants/${encodeURIComponent(
+        participantToken
+      )}`,
+      {
+        method: "PATCH",
+        body: payload,
+      }
+    ),
+
   publicComplete: async ({
     publicToken,
     participantToken,
