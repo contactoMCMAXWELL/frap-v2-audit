@@ -91,6 +91,21 @@ async function uploadRequest(
 }
 
 export const participantProtectionApi = {
+  privacyNotices: async ({
+    token,
+    companyId,
+    userId,
+  }) =>
+    request(
+      "/v2/company-privacy-notices",
+      {
+        token,
+        companyId,
+        userId,
+      }
+    ),
+
+
   get: async ({
     intakeId,
     token,

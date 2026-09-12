@@ -721,6 +721,28 @@ export const v2Api = {
     });
   },
 
+  companyPrivacyNoticesList: async ({ token, companyId, userId } = {}) => {
+    return await httpApi(`/v2/company-privacy-notices`, {
+      method: "GET",
+      token,
+      companyId,
+      userId,
+    });
+  },
+
+  companyPrivacyNoticePublishFromPdfConfig: async ({
+    token,
+    companyId,
+    userId,
+  } = {}) => {
+    return await httpApi(`/v2/company-privacy-notices/publish-from-pdf-config`, {
+      method: "POST",
+      token,
+      companyId,
+      userId,
+    });
+  },
+
   frapSignaturesGet: async ({ intakeId, token, companyId, userId } = {}) => {
     if (!intakeId) {
       throw new Error("frapSignaturesGet requires intakeId");

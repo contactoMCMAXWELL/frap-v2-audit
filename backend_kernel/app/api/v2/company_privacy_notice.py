@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import re
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_company_id, get_current_user, get_db
+from app.models.company import Company
+from app.models.company_pdf_config import CompanyPdfConfig
 from app.models.company_privacy_notice import CompanyPrivacyNotice
 from app.models.event_participant_protection import EventParticipantProtection
 from app.schemas.v2.company_privacy_notice import (
@@ -73,6 +76,106 @@ def _version_exists(
     if exclude_id is not None:
         query = query.filter(CompanyPrivacyNotice.id != exclude_id)
     return query.first() is not None
+
+
+def _next_version(db: Session, company_id: UUID) -> str:
+    rows = (
+        db.query(CompanyPrivacyNotice.version)
+        .filter(CompanyPrivacyNotice.company_id == company_id)
+        .all()
+    )
+
+    parsed_versions: list[tuple[int, int]] = []
+    for row in rows:
+        raw = str(row[0] or "").strip()
+        match = re.fullmatch(r"(\d+)\.(\d+)", raw)
+        if match:
+            parsed_versions.append((int(match.group(1)), int(match.group(2))))
+
+    if not parsed_versions:
+        return "1.0"
+
+    major, minor = max(parsed_versions)
+    return f"{major}.{minor + 1}"
+
+
+@router.post(
+    "/v2/company-privacy-notices/publish-from-pdf-config",
+    response_model=CompanyPrivacyNoticeOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def publish_company_privacy_notice_from_pdf_config(
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+    company_id: UUID = Depends(get_company_id),
+):
+    _require_allowed_role(user)
+
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Empresa no encontrada")
+
+    pdf_config = (
+        db.query(CompanyPdfConfig)
+        .filter(CompanyPdfConfig.company_id == company_id)
+        .first()
+    )
+
+    content = str(getattr(pdf_config, "privacy_notice_text", "") or "").strip()
+    if not content:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Captura y guarda el Aviso de Privacidad en Configuración PDF "
+                "antes de publicarlo"
+            ),
+        )
+
+    responsible_name = str(
+        getattr(company, "legal_name", "") or getattr(company, "name", "") or ""
+    ).strip()
+    responsible_address = str(getattr(company, "address", "") or "").strip()
+    company_email = str(getattr(company, "email", "") or "").strip()
+
+    missing = []
+    if not responsible_name:
+        missing.append("razón social o nombre de la empresa")
+    if not responsible_address:
+        missing.append("domicilio de la empresa")
+    if not company_email:
+        missing.append("correo electrónico de la empresa")
+
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "No se puede publicar el Aviso de Privacidad. "
+                "Completa en Empresa: " + ", ".join(missing)
+            ),
+        )
+
+    now = datetime.now(timezone.utc)
+    version = _next_version(db, company_id)
+
+    row = CompanyPrivacyNotice(
+        company_id=company_id,
+        version=version,
+        status="PUBLISHED",
+        title=f"Aviso de Privacidad - {responsible_name}",
+        content=content,
+        responsible_name=responsible_name,
+        responsible_address=responsible_address,
+        privacy_email=company_email,
+        arco_email=company_email,
+        effective_from=now,
+        published_at=now,
+        published_by_user_id=getattr(user, "id", None),
+    )
+
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
 
 
 @router.get("/v2/company-privacy-notices", response_model=list[CompanyPrivacyNoticeOut])

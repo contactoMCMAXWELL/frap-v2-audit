@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_company_id, get_current_user
 from app.db.session import get_db
 from app.models.company import Company
+from app.models.company_privacy_notice import CompanyPrivacyNotice
 from app.models.event_participant_protection import (
     EventParticipant,
     EventParticipantAccessLog,
@@ -199,7 +200,36 @@ def upsert_event_protection(
         )
         db.add(row)
 
-    for key, value in payload.model_dump().items():
+    data = payload.model_dump()
+
+    privacy_notice_version = str(
+        data.get("privacy_notice_version") or ""
+    ).strip()
+
+    if privacy_notice_version:
+        privacy_notice = (
+            db.query(CompanyPrivacyNotice)
+            .filter(
+                CompanyPrivacyNotice.company_id == company_id,
+                CompanyPrivacyNotice.version == privacy_notice_version,
+                CompanyPrivacyNotice.status == "PUBLISHED",
+                CompanyPrivacyNotice.published_at.isnot(None),
+            )
+            .first()
+        )
+
+        if not privacy_notice:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "La versión del Aviso de Privacidad seleccionada "
+                    "no existe o no está publicada para esta empresa"
+                ),
+            )
+
+        data["privacy_notice_version"] = privacy_notice_version
+
+    for key, value in data.items():
         setattr(row, key, value)
 
     if not row.public_event_name:

@@ -27,7 +27,7 @@ const emptyForm = {
   cover_image_url: "",
   organizer_message: "",
   gallery_json: [],
-  privacy_notice_version: "1.0",
+  privacy_notice_version: "",
   extra_json: {},
 };
 
@@ -97,6 +97,7 @@ export default function EventParticipantProtectionConfig({ session }) {
   const [form, setForm] = useState(emptyForm);
   const [saved, setSaved] = useState(null);
   const [participants, setParticipants] = useState([]);
+  const [privacyNotices, setPrivacyNotices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -201,6 +202,24 @@ export default function EventParticipantProtectionConfig({ session }) {
           return;
         }
 
+        const noticeRows = await participantProtectionApi.privacyNotices({
+          token: session?.token,
+          companyId: session?.companyId,
+          userId: session?.userId,
+        });
+
+        if (!mounted) return;
+
+        setPrivacyNotices(
+          Array.isArray(noticeRows)
+            ? noticeRows.filter(
+                (notice) =>
+                  notice.status === "PUBLISHED" &&
+                  Boolean(notice.published_at)
+              )
+            : []
+        );
+
         try {
           const config = await participantProtectionApi.get({
             intakeId,
@@ -221,7 +240,7 @@ export default function EventParticipantProtectionConfig({ session }) {
             cover_image_url: config.cover_image_url || "",
             organizer_message: config.organizer_message || "",
             gallery_json: Array.isArray(config.gallery_json) ? config.gallery_json : [],
-            privacy_notice_version: config.privacy_notice_version || "1.0",
+            privacy_notice_version: config.privacy_notice_version || "",
             extra_json: config.extra_json || {},
           });
 
@@ -388,6 +407,21 @@ export default function EventParticipantProtectionConfig({ session }) {
       setError("");
       setMessage("");
 
+      const privacyNoticeIsValid = privacyNotices.some(
+        (notice) =>
+          String(notice.version) === String(form.privacy_notice_version)
+      );
+
+      if (
+        form.enabled &&
+        (!form.privacy_notice_version || !privacyNoticeIsValid)
+      ) {
+        setError(
+          "Selecciona un Aviso de Privacidad publicado antes de guardar la configuración."
+        );
+        return;
+      }
+
       const payload = {
         ...form,
         public_event_name: String(form.public_event_name || "").trim(),
@@ -508,6 +542,22 @@ export default function EventParticipantProtectionConfig({ session }) {
 
       return Array.from(new Set([...current, ...visibleIds]));
     });
+  };
+
+  const qrCompanyName =
+    String(session?.companyName || "").trim() ||
+    String(intake?.company_name || intake?.company?.name || "").trim() ||
+    "Empresa de ambulancias";
+
+  const qrOrganizerLogoUrl = String(form.organizer_logo_url || "").trim();
+
+  const resolveQrLogoUrl = () => {
+    if (!qrOrganizerLogoUrl) return "";
+    try {
+      return new URL(qrOrganizerLogoUrl, window.location.origin).href;
+    } catch {
+      return "";
+    }
   };
 
   const printParticipantQrBatch = async (mode) => {
@@ -631,9 +681,10 @@ export default function EventParticipantProtectionConfig({ session }) {
           }
 
           .credential {
+            position: relative;
             width: 90mm;
             height: 125mm;
-            padding: 8mm;
+            padding: 6mm 7mm 15mm;
             background: #ffffff;
             border: 1px solid #c7d8e3;
             border-radius: 5mm;
@@ -649,16 +700,24 @@ export default function EventParticipantProtectionConfig({ session }) {
             color: #51758e;
           }
 
+          .logo {
+            display: block;
+            max-width: 52mm;
+            max-height: 13mm;
+            margin: 0 auto 3px;
+            object-fit: contain;
+          }
+
           .product {
-            margin-top: 3px;
-            font-size: 18px;
+            margin-top: 2px;
+            font-size: 16px;
             font-weight: 900;
             color: #315b79;
           }
 
           .event {
-            margin-top: 9px;
-            padding-bottom: 8px;
+            margin-top: 6px;
+            padding-bottom: 6px;
             border-bottom: 1px solid #d9e5ec;
             font-size: 12px;
             font-weight: 700;
@@ -667,12 +726,12 @@ export default function EventParticipantProtectionConfig({ session }) {
           }
 
           .name {
-            margin-top: 9px;
-            font-size: 18px;
+            margin-top: 6px;
+            font-size: 16px;
             font-weight: 900;
             line-height: 1.1;
             color: #183c55;
-            min-height: 39px;
+            min-height: 32px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -687,24 +746,37 @@ export default function EventParticipantProtectionConfig({ session }) {
 
           .qr {
             display: block;
-            width: 48mm;
-            height: 48mm;
-            margin: 7px auto 5px;
+            width: 44mm;
+            height: 44mm;
+            margin: 4px auto 3px;
           }
 
           .instruction {
-            margin-top: 3px;
-            font-size: 12px;
+            margin-top: 2px;
+            font-size: 10.5px;
             font-weight: 850;
             line-height: 1.25;
             color: #244d68;
           }
 
           .privacy {
-            margin-top: 5px;
-            font-size: 7.5px;
-            line-height: 1.25;
+            margin-top: 3px;
+            font-size: 6.8px;
+            line-height: 1.2;
             color: #7890a0;
+          }
+
+          .ownership {
+            position: absolute;
+            left: 7mm;
+            right: 7mm;
+            bottom: 4.5mm;
+            padding-top: 4px;
+            border-top: 1px solid #d9e5ec;
+            font-size: 6.6px;
+            line-height: 1.15;
+            font-weight: 800;
+            color: #315b79;
           }
 
           @page {
@@ -751,9 +823,20 @@ export default function EventParticipantProtectionConfig({ session }) {
           brand.className = "brand";
           brand.textContent = "Protección médica del participante";
 
+          const logoUrl = resolveQrLogoUrl();
+          const logo = logoUrl ? doc.createElement("img") : null;
+          if (logo) {
+            logo.className = "logo";
+            logo.alt = `Logo de ${qrCompanyName}`;
+            logo.src = logoUrl;
+            logo.onerror = () => {
+              logo.style.display = "none";
+            };
+          }
+
           const product = doc.createElement("div");
           product.className = "product";
-          product.textContent = "AmbulanciaYA";
+          product.textContent = qrCompanyName;
 
           const event = doc.createElement("div");
           event.className = "event";
@@ -784,7 +867,13 @@ export default function EventParticipantProtectionConfig({ session }) {
           privacy.textContent =
             "Esta identificación no contiene información médica visible. El acceso a datos protegidos requiere autorización dentro de AmbulanciaYA.";
 
+          const ownership = doc.createElement("div");
+          ownership.className = "ownership";
+          ownership.textContent =
+            "AmbulanciaYA - Propiedad de MC-MAXWELL SOFTWARE Y SERVICIOS";
+
           card.appendChild(brand);
+          if (logo) card.appendChild(logo);
           card.appendChild(product);
           card.appendChild(event);
           card.appendChild(name);
@@ -792,6 +881,7 @@ export default function EventParticipantProtectionConfig({ session }) {
           card.appendChild(qr);
           card.appendChild(instruction);
           card.appendChild(privacy);
+          card.appendChild(ownership);
 
           page.appendChild(card);
         });
@@ -906,13 +996,15 @@ export default function EventParticipantProtectionConfig({ session }) {
           }
 
           .credential {
+            position: relative;
             width: 90mm;
-            min-height: 125mm;
-            padding: 8mm;
+            height: 125mm;
+            padding: 6mm 7mm 15mm;
             background: #ffffff;
             border: 1px solid #c7d8e3;
             border-radius: 6mm;
             text-align: center;
+            overflow: hidden;
             box-shadow: 0 8px 28px rgba(29, 67, 91, 0.12);
           }
 
@@ -924,16 +1016,24 @@ export default function EventParticipantProtectionConfig({ session }) {
             color: #51758e;
           }
 
+          .logo {
+            display: block;
+            max-width: 58mm;
+            max-height: 14mm;
+            margin: 0 auto 4px;
+            object-fit: contain;
+          }
+
           .product {
-            margin-top: 3px;
-            font-size: 19px;
+            margin-top: 2px;
+            font-size: 17px;
             font-weight: 900;
             color: #315b79;
           }
 
           .event {
-            margin-top: 12px;
-            padding-bottom: 12px;
+            margin-top: 8px;
+            padding-bottom: 8px;
             border-bottom: 1px solid #d9e5ec;
             font-size: 13px;
             font-weight: 700;
@@ -941,8 +1041,8 @@ export default function EventParticipantProtectionConfig({ session }) {
           }
 
           .name {
-            margin-top: 15px;
-            font-size: 22px;
+            margin-top: 9px;
+            font-size: 20px;
             font-weight: 900;
             line-height: 1.15;
             color: #183c55;
@@ -957,24 +1057,37 @@ export default function EventParticipantProtectionConfig({ session }) {
 
           .qr {
             display: block;
-            width: 55mm;
-            height: 55mm;
-            margin: 15px auto 10px;
+            width: 48mm;
+            height: 48mm;
+            margin: 8px auto 5px;
           }
 
           .instruction {
-            margin-top: 5px;
-            font-size: 14px;
+            margin-top: 3px;
+            font-size: 12px;
             font-weight: 850;
             line-height: 1.3;
             color: #244d68;
           }
 
           .privacy {
-            margin-top: 10px;
-            font-size: 9px;
-            line-height: 1.35;
+            margin-top: 5px;
+            font-size: 7.5px;
+            line-height: 1.25;
             color: #7890a0;
+          }
+
+          .ownership {
+            position: absolute;
+            left: 7mm;
+            right: 7mm;
+            bottom: 4.5mm;
+            padding-top: 5px;
+            border-top: 1px solid #d9e5ec;
+            font-size: 7px;
+            line-height: 1.2;
+            font-weight: 800;
+            color: #315b79;
           }
 
           @media print {
@@ -1005,7 +1118,8 @@ export default function EventParticipantProtectionConfig({ session }) {
         <div class="sheet">
           <section class="credential">
             <div class="brand">Protección médica del participante</div>
-            <div class="product">AmbulanciaYA</div>
+            <img class="logo" id="organizerLogo" alt="" style="display:none" />
+            <div class="product" id="companyName"></div>
             <div class="event" id="eventName"></div>
             <div class="name" id="participantName"></div>
             <div class="number" id="participantNumber"></div>
@@ -1015,9 +1129,25 @@ export default function EventParticipantProtectionConfig({ session }) {
               Esta identificación no contiene información médica visible.
               El acceso a datos protegidos requiere autorización dentro de AmbulanciaYA.
             </div>
+            <div class="ownership">
+              AmbulanciaYA - Propiedad de MC-MAXWELL SOFTWARE Y SERVICIOS
+            </div>
           </section>
         </div>
       `;
+
+      doc.getElementById("companyName").textContent = qrCompanyName;
+
+      const organizerLogo = doc.getElementById("organizerLogo");
+      const organizerLogoUrl = resolveQrLogoUrl();
+      if (organizerLogoUrl) {
+        organizerLogo.alt = `Logo de ${qrCompanyName}`;
+        organizerLogo.src = organizerLogoUrl;
+        organizerLogo.style.display = "block";
+        organizerLogo.onerror = () => {
+          organizerLogo.style.display = "none";
+        };
+      }
 
       doc.getElementById("eventName").textContent = eventName;
       doc.getElementById("participantName").textContent =
@@ -1028,13 +1158,28 @@ export default function EventParticipantProtectionConfig({ session }) {
           : "Participante registrado";
       doc.getElementById("participantQr").src = qrDataUrl;
 
-      const image = doc.getElementById("participantQr");
+      const images = Array.from(doc.images).filter(
+        (image) => image.style.display !== "none"
+      );
 
-      image.onload = () => {
-        setQrPrintState("ready");
-        printWindow.focus();
-        printWindow.print();
-      };
+      await Promise.all(
+        images.map(
+          (image) =>
+            new Promise((resolve) => {
+              if (image.complete) {
+                resolve();
+                return;
+              }
+
+              image.onload = resolve;
+              image.onerror = resolve;
+            })
+        )
+      );
+
+      setQrPrintState("ready");
+      printWindow.focus();
+      printWindow.print();
     } catch (printError) {
       if (printWindow && !printWindow.closed) {
         printWindow.close();
@@ -1639,19 +1784,55 @@ export default function EventParticipantProtectionConfig({ session }) {
               </p>
             </div>
 
-            <label style={{ ...labelStyle, maxWidth: 360 }}>
-              Versión del Aviso de Privacidad
-              <input
+            <label style={{ ...labelStyle, maxWidth: 520 }}>
+              Aviso de Privacidad publicado
+              <select
                 value={form.privacy_notice_version}
                 onChange={(e) => onChange("privacy_notice_version", e.target.value)}
                 style={inputStyle}
-              />
+              >
+                <option value="">Selecciona un Aviso de Privacidad publicado</option>
+
+                {form.privacy_notice_version &&
+                  !privacyNotices.some(
+                    (notice) =>
+                      String(notice.version) === String(form.privacy_notice_version)
+                  ) && (
+                    <option value={form.privacy_notice_version} disabled>
+                      Versión {form.privacy_notice_version} — no disponible o no publicada
+                    </option>
+                  )}
+
+                {privacyNotices.map((notice) => (
+                  <option key={notice.id || notice.version} value={notice.version}>
+                    {`v${notice.version} — ${notice.title || "Aviso de Privacidad"}`}
+                  </option>
+                ))}
+              </select>
             </label>
 
             <div style={privacyNoteStyle}>
-              <strong>Importante</strong>
+              <strong>
+                {privacyNotices.length === 0
+                  ? "Sin avisos publicados"
+                  : form.privacy_notice_version &&
+                      !privacyNotices.some(
+                        (notice) =>
+                          String(notice.version) === String(form.privacy_notice_version)
+                      )
+                    ? "Versión histórica"
+                    : "Aviso de Privacidad"}
+              </strong>
               <span>
-                En una siguiente etapa sustituiremos este campo libre por un selector de versiones publicadas para evitar referencias inválidas.
+                {privacyNotices.length === 0
+                  ? "Esta empresa no tiene un Aviso de Privacidad publicado disponible para asignar al evento."
+                  : form.privacy_notice_version &&
+                      !privacyNotices.some(
+                        (notice) =>
+                          String(notice.version) === String(form.privacy_notice_version)
+                      )
+                    ? `El evento conserva la versión ${form.privacy_notice_version}, pero esa versión ya no está disponible entre los avisos publicados. Selecciona una versión publicada antes de actualizar esta configuración.`
+                    : "La versión seleccionada será la que se muestre al participante y quede asociada a su consentimiento."}
               </span>
             </div>
           </section>
